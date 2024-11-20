@@ -1,0 +1,16 @@
+# Virtual environment
+venv/
+.venv/
+
+# Python bytecode
+*.pyc
+
+# IDE config files (e.g., VSCode, PyCharm)
+.vscode/
+.idea/
+
+# Environment variables
+.env
+
+# FastAPI specific
+*.sqlite  # If using SQLite DB file (but ignore if using a proper database)
