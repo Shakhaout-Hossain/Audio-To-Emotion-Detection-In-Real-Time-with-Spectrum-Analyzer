@@ -39,18 +39,18 @@ async def startup_event():
     
 
 
-@app.get("/")
+@app.get("/fastapi/")
 def read_root():
     return {"Hello": "World"}
 
 
-@app.get("/items/{item_id}")
+@app.get("/fastapi/items/{item_id}")
 def read_item(item_id: int, q: str| None = None):
     return {"item_id": item_id, "q": q}
 
 
 
-@app.post("fastapi/upload_wav/")
+@app.post("/fastapi/upload_wav/")
 async def upload_wav(file: UploadFile = File(...)):
     if not file.filename.endswith(".wav"):
         return {"error": "Only .wav files are allowed."}
