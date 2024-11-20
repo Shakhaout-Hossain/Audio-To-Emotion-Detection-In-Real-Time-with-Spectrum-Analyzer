@@ -50,7 +50,7 @@ def read_item(item_id: int, q: str| None = None):
 
 
 
-@app.post("/upload_wav/")
+@app.post("fastapi/upload_wav/")
 async def upload_wav(file: UploadFile = File(...)):
     if not file.filename.endswith(".wav"):
         return {"error": "Only .wav files are allowed."}
