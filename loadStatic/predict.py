@@ -89,7 +89,7 @@ async def prediction(path1):
 
     # Map predicted index to the corresponding emotion label
     y_pred = [emotions1[i+1] for i in predicted_index]  # Adjust index by 1 due to emotions1 dictionary keys
-    print(predicted_index)
-    print(y_pred[0])  # Print the first prediction result
+    # print(predicted_index)
+    # print(y_pred[0])  # Print the first prediction result
     # return y_pred[0]
-    return [pre,y_pred[0]]
+    return y_pred[0]

@@ -1,0 +1,662 @@
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Audio Streaming</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      text-align: center;
+    }
+    #status {
+      margin-bottom: 1rem;
+      font-weight: bold;
+    }
+    #results {
+      margin-top: 1rem;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #f9f9f9;
+      text-align: left;
+    }
+    button {
+      margin: 0.5rem;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    #startBtn {
+      background-color: #28a745;
+      color: white;
+    }
+    #stopBtn {
+      background-color: #dc3545;
+      color: white;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Audio Streaming</h1>
+  <p id="status">Click "Start Recording" to begin streaming audio from your microphone.</p>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  
+  <h2>Results:</h2>
+  <div id="results">No results yet. Please start recording.</div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    const chunkDuration = 5000; // 5 seconds
+    let reconnectAttempts = 0;
+    const maxReconnects = 5;
+
+    function connectWebSocket() {
+      if (wsAudio && wsAudio.readyState === WebSocket.OPEN) return;
+
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+
+      wsAudio.onopen = () => {
+        console.log("Connected to WebSocket server");
+        document.getElementById("status").textContent = "Connected to server. Ready to record.";
+        reconnectAttempts = 0;
+      };
+
+      wsAudio.onmessage = async (event) => {
+        try {
+          let data = JSON.parse(event.data);
+          console.log(`Received result for chunk ${data.chunkId}: ${data.result}`);
+          
+          const resultsContainer = document.getElementById("results");
+
+          if (resultsContainer.textContent.includes("No results yet")) {
+            resultsContainer.textContent = "";
+          }
+
+          const para = document.createElement("p");
+          para.textContent = `Chunk: ${data.chunkId} - Result: ${data.result}`;
+
+          switch (data.result.toLowerCase()) {
+            case "happy":
+              para.style.color = "green";
+              break;
+            case "sad":
+              para.style.color = "blue";
+              break;
+            case "angry":
+              para.style.color = "red";
+              break;
+            case "neutral":
+              para.style.color = "gray";
+              break;
+            default :
+                para.style.color = "red"
+          }
+
+          resultsContainer.appendChild(para);
+          resultsContainer.scrollTop = resultsContainer.scrollHeight;
+
+        } catch (error) {
+          console.error("Error parsing result:", error);
+        }
+      };
+
+      wsAudio.onerror = (error) => console.error("WebSocket error:", error);
+
+      wsAudio.onclose = () => {
+        console.log("WebSocket closed.");
+        if (reconnectAttempts < maxReconnects) {
+          reconnectAttempts++;
+          console.log(`Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnects})`);
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          console.log("Max reconnection attempts reached.");
+        }
+      };
+    }
+
+    connectWebSocket();
+
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Error accessing microphone:", error);
+        document.getElementById("status").textContent = "Microphone access denied.";
+        document.getElementById("startBtn").disabled = true;
+        return;
+      }
+
+      mediaRecorder = new MediaRecorder(audioStream);
+      
+      mediaRecorder.addEventListener("dataavailable", async (event) => {
+        if (event.data && event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+          console.log("Sent an audio chunk to the server.");
+        }
+      });
+
+      mediaRecorder.start(chunkDuration);
+      document.getElementById("status").textContent = "Recording... Streaming audio in 5-second chunks.";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    });
+
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    });
+  </script>
+</body>
+</html> -->
+
+
+<!-- 
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Audio Streaming</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      text-align: center;
+    }
+    #status {
+      margin-bottom: 1rem;
+      font-weight: bold;
+    }
+    #results {
+      margin-top: 1rem;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #f9f9f9;
+      text-align: left;
+    }
+    button {
+      margin: 0.5rem;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    #startBtn {
+      background-color: #28a745;
+      color: white;
+    }
+    #stopBtn {
+      background-color: #dc3545;
+      color: white;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Audio Streaming</h1>
+  <p id="status">Click "Start Recording" to begin streaming audio from your microphone.</p>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  
+  <h2>Results:</h2>
+  <div id="results">No results yet. Please start recording.</div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    const chunkDuration = 5000; // 5 seconds
+    let reconnectAttempts = 0;
+    const maxReconnects = 5;
+
+    function connectWebSocket() {
+      if (wsAudio && wsAudio.readyState === WebSocket.OPEN) return;
+
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+
+      wsAudio.onopen = () => {
+        console.log("Connected to WebSocket server");
+        document.getElementById("status").textContent = "Connected to server. Ready to record.";
+        reconnectAttempts = 0;
+      };
+
+      wsAudio.onmessage = async (event) => {
+        try {
+          let data = JSON.parse(event.data);
+          console.log(`Received result for chunk ${data.chunkId}: ${data.result}`);
+          
+          const resultsContainer = document.getElementById("results");
+
+          if (resultsContainer.textContent.includes("No results yet")) {
+            resultsContainer.textContent = "";
+          }
+
+          const para = document.createElement("p");
+          para.textContent = `Chunk: ${data.chunkId} - Result: ${data.result}`;
+
+          switch (data.result.toLowerCase()) {
+            case "happy":
+              para.style.color = "green";
+              break;
+            case "sad":
+              para.style.color = "blue";
+              break;
+            case "angry":
+              para.style.color = "red";
+              break;
+            case "neutral":
+              para.style.color = "gray";
+              break;
+            default:
+              para.style.color = "red";
+          }
+
+          resultsContainer.appendChild(para);
+          resultsContainer.scrollTop = resultsContainer.scrollHeight;
+
+        } catch (error) {
+          console.error("Error parsing result:", error);
+        }
+      };
+
+      wsAudio.onerror = (error) => console.error("WebSocket error:", error);
+
+      wsAudio.onclose = () => {
+        console.log("WebSocket closed.");
+        if (reconnectAttempts < maxReconnects) {
+          reconnectAttempts++;
+          console.log(`Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnects})`);
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          console.log("Max reconnection attempts reached.");
+        }
+      };
+    }
+
+    connectWebSocket();
+
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Error accessing microphone:", error);
+        document.getElementById("status").textContent = "Microphone access denied.";
+        document.getElementById("startBtn").disabled = true;
+        return;
+      }
+
+      mediaRecorder = new MediaRecorder(audioStream, { 
+          mimeType: 'audio/webm; codecs=opus' 
+      });
+      
+      mediaRecorder.addEventListener("dataavailable", async (event) => {
+        if (event.data && event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+          console.log("Sent an audio chunk to the server.");
+        }
+      });
+
+      mediaRecorder.start(chunkDuration);
+      document.getElementById("status").textContent = "Recording... Streaming audio in 5-second chunks.";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    });
+
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    });
+  </script>
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set Chunk Time for Recording</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; text-align: center; }
+    #status { margin-bottom: 1rem; font-weight: bold; }
+    .container { display: flex; justify-content: space-around; align-items: flex-start; }
+    #results { width: 45%; border: 1px solid #ccc; padding: 1rem; background: #f9f9f9; text-align: left; }
+    #chartContainer { width: 45%; }
+    button, input { margin: 0.5rem; padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; border-radius: 5px; }
+    #startBtn { background-color: #28a745; color: white; }
+    #stopBtn { background-color: #dc3545; color: white; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>Set Chunk Time for Recording</h1>
+  <label for="chunkTime">Chunk Time (ms):</label>
+  <input type="number" id="chunkTime" value="5000" min="1000" step="1000">
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <p id="status">Set chunk time and click "Start Recording".</p>
+  
+  <div class="container">
+    <div id="results">No results yet. Please start recording.</div>
+    <div id="chartContainer">
+      <canvas id="emotionChartLoad"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    let isRecording = false;
+    let segmentDuration;
+    let emotions = [];
+    let chunkIds = [];
+
+     // Emotion configuration
+     const emotionsChart = {
+        labels: ['Neutral', 'Calm', 'Happy', 'Sad', 'Angry', 'Fear', 'Disgust', 'Surprise'],
+        labelToIndex: {
+            'Neutral': 0,
+            'Calm': 1,
+            'Happy': 2,
+            'Sad': 3,
+            'Angry': 4,
+            'Fear': 5,
+            'Disgust': 6,
+            'Surprise': 7
+        },
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        colors: [
+            '#9CA3AF', '#3B82F6', '#FCD34D', '#6B7280',
+            '#EF4444', '#7C3AED', '#10B981', '#F59E0B'
+        ]
+    };
+
+    // Function to increase data by label
+    function increaseData(label, amount = 1) {
+        const index = emotionsChart.labelToIndex[label];
+        if (index !== undefined) {
+            emotionsChart.data[index] += amount;
+            emotionChart.update();
+        }
+    }
+
+    // Chart configuration
+    const config = {
+        type: 'bar',
+        data: {
+            labels: emotionsChart.labels,
+            datasets: [{
+                label: 'Emotion Intensity',
+                data: emotionsChart.data,
+                backgroundColor: emotionsChart.colors,
+                borderWidth: 2
+            }]
+        },
+        options: { /* ... keep existing options ... */ }
+    };
+
+    // Render the chart
+    const emotionChart = new Chart(
+      document.getElementById('emotionChartLoad'),
+      config
+    );
+    
+    function connectWebSocket() {
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+      wsAudio.onmessage = (event) => {
+        let data = JSON.parse(event.data);
+        let resultsContainer = document.getElementById("results");
+        if (resultsContainer.textContent.includes("No results yet")) {
+          resultsContainer.textContent = "";
+        }
+        //let para = document.createElement("p");
+        //para.textContent = `Chunk ${data.chunkId}: ${data.result}`;
+       // resultsContainer.appendChild(para);
+
+
+        const para = document.createElement("p");
+          para.textContent = `Chunk: ${data.chunkId} - Result: ${data.result}`;
+
+          switch (data.result.toLowerCase()) {
+            case "happy":
+              para.style.color = "green";
+              break;
+            case "sad":
+              para.style.color = "blue";
+              break;
+            case "angry":
+              para.style.color = "red";
+              break;
+            case "neutral":
+              para.style.color = "gray";
+              break;
+            default:
+              para.style.color = "red";
+          }
+
+          resultsContainer.appendChild(para);
+          resultsContainer.scrollTop = resultsContainer.scrollHeight;
+        
+        increaseData(data.result,1);      // Adds 1 to Calm's value
+       
+      };
+    }
+
+
+    async function startRecording() {
+      if (isRecording) return;
+      isRecording = true;
+      segmentDuration = parseInt(document.getElementById("chunkTime").value) || 5000;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Microphone access denied:", error);
+        return;
+      }
+      mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm; codecs=opus' });
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+        }
+      };
+      function recordSegment() {
+        if (!isRecording) return;
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          setTimeout(recordSegment, 200);
+        }, segmentDuration);
+      }
+      connectWebSocket();
+      recordSegment();
+      document.getElementById("status").textContent = `Recording with chunk time: ${segmentDuration}ms`;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    }
+
+    document.getElementById("startBtn").addEventListener("click", startRecording);
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    });
+  </script>
+</body>
+</html>
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set Chunk Time for Recording</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; text-align: center; }
+    #status { margin-bottom: 1rem; font-weight: bold; }
+    #results { margin-top: 1rem; border: 1px solid #ccc; padding: 1rem; max-height: 500px; overflow-y: auto; background: #f9f9f9; text-align: left; }
+    button, input { margin: 0.5rem; padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; border-radius: 5px; }
+    #startBtn { background-color: #28a745; color: white; }
+    #stopBtn { background-color: #dc3545; color: white; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    canvas { margin-top: 1rem; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Set Chunk Time for Recording</h1>
+  <label for="chunkTime">Chunk Time (ms):</label>
+  <input type="number" id="chunkTime" value="5000" min="1000" step="1000">
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <p id="status">Set chunk time and click "Start Recording".</p>
+  
+  <h2>Results:</h2>
+  <div id="results">No results yet. Please start recording.</div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    let isRecording = false;
+    let segmentDuration;
+
+    function connectWebSocket() {
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+      wsAudio.onopen = () => console.log("Connected to WebSocket server");
+      wsAudio.onmessage = (event) => {
+        let data = JSON.parse(event.data);
+        let resultsContainer = document.getElementById("results");
+
+        if (resultsContainer.textContent.includes("No results yet")) {
+          resultsContainer.textContent = "";
+        }
+
+        // Displaying the result text
+        let para = document.createElement("p");
+        para.textContent = `Chunk ${data.chunkId}: ${data.result[0]}`;
+        resultsContainer.appendChild(para);
+
+        // Create a canvas element for each chunk
+        let canvas = document.createElement("canvas");
+        resultsContainer.appendChild(canvas);
+
+        // Plotting the graph based on the result data
+        new Chart(canvas.getContext("2d"), {
+          type: 'bar',
+          data: {
+            labels: ['Result 1', 'Result 2', 'Result 3'],
+            datasets: [{
+              label: 'Result Data',
+              data: data.result,  // Assuming result contains numerical data for the graph
+              backgroundColor: ['rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)'],
+              borderColor: ['rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            scales: {
+              y: {
+                beginAtZero: true
+              }
+            }
+          }
+        });
+      };
+    }
+
+    async function startRecording() {
+      if (isRecording) return;
+      isRecording = true;
+      segmentDuration = parseInt(document.getElementById("chunkTime").value) || 5000;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Microphone access denied:", error);
+        return;
+      }
+      mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm; codecs=opus' });
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+        }
+      };
+      function recordSegment() {
+        if (!isRecording) return;
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          setTimeout(recordSegment, 200);
+        }, segmentDuration);
+      }
+      connectWebSocket();
+      recordSegment();
+      document.getElementById("status").textContent = `Recording with chunk time: ${segmentDuration}ms`;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    }
+
+    document.getElementById("startBtn").addEventListener("click", startRecording);
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    });
+  </script>
+</body>
+</html> -->

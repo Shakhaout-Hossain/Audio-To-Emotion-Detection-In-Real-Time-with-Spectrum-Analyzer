@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emotion Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div style="width: 800px; margin: 20px auto">
+        <canvas id="emotionChart"></canvas>
+    </div>
+
+    <script>
+        // Emotion data configuration
+        const emotionData = {
+            labels: ['Neutral', 'Calm', 'Happy', 'Sad', 'Angry', 'Fear', 'Disgust', 'Surprise'],
+            datasets: [{
+                label: 'Emotion Intensity',
+                data: [3, 8, 9, 3, 6, 4, 2, 7], // Sample data (modify as needed)
+                backgroundColor: [
+                    '#9CA3AF', // Neutral
+                    '#3B82F6', // Calm
+                    '#FCD34D', // Happy
+                    '#6B7280', // Sad
+                    '#EF4444', // Angry
+                    '#7C3AED', // Fear
+                    '#10B981', // Disgust
+                    '#F59E0B'  // Surprise
+                ],
+                borderWidth: 2
+            }]
+        };
+
+        // Chart configuration
+        const config = {
+            type: 'bar', // Change to 'pie' or 'doughnut' for different formats
+            data: emotionData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Emotion Distribution'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Intensity Level'
+                        }
+                    }
+                }
+            }
+        };
+
+        // Render the chart
+        const emotionChart = new Chart(
+            document.getElementById('emotionChart'),
+            config
+        );
+    </script>
+</body>
+</html>

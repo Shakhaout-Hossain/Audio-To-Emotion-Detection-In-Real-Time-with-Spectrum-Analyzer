@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio To Emotion Detection In Real Time with Spectrum Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; text-align: center; }
+    #status { margin-bottom: 1rem; font-weight: bold; }
+    .container { display: flex; justify-content: space-between; align-items: flex-start; }
+    .left-panel { width: 48%; text-align: left; }
+    .right-panel { width: 48%; }
+    #results { 
+      width: 100%; 
+      max-height: 600px; /* Adjust the height as needed */
+      border: 1px solid #ccc; 
+      padding: 1rem; 
+      background: #f9f9f9; 
+      overflow-y: auto; /* Enables vertical scrolling */
+      overflow-x: hidden; /* Disables horizontal scrolling */
+    }
+    #chartContainer { width: 100%; margin-top: 2rem; }
+    button, input { margin: 0.5rem; padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; border-radius: 5px; }
+    #startBtn { background-color: #28a745; color: white; }
+    #stopBtn { background-color: #dc3545; color: white; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    canvas { width: 100%; height: 200px; margin-top: 1rem; }
+    #audio-spectrum-label {
+      font-size: 18px;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Audio To Emotion Detection In Real Time with Spectrum Analyzer</h1>
+  <label for="chunkTime">Chunk Time (ms):</label>
+  <input type="number" id="chunkTime" value="5000" min="1000" step="1000">
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <p id="status">Set chunk time and click "Start Recording".</p>
+  
+  <div class="container">
+    <div class="left-panel">
+      <div id="results">No results yet. Please start recording.</div>
+    </div>
+    <div class="right-panel">
+      <div id="chartContainer">
+        <canvas id="emotionChartLoad"></canvas>
+      </div>
+      <div id="audio-spectrum-label">Audio Spectrum Analyzer</div>
+      <canvas id="oscilloscope" class="my-3"></canvas>
+      <canvas id="magnitude-spectrum" class="my-3"></canvas>
+      <canvas id="spectrogram" class="my-3"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    let isRecording = false;
+    let segmentDuration;
+    let emotions = [];
+    let chunkIds = [];
+    let td=0
+    let sd = 5
+    // Emotion configuration
+    const emotionsChart = {
+      labels: ['Neutral', 'Calm', 'Happy', 'Sad', 'Angry', 'Fear', 'Disgust', 'Surprise'],
+      labelToIndex: {
+        'Neutral': 0,
+        'Calm': 1,
+        'Happy': 2,
+        'Sad': 3,
+        'Angry': 4,
+        'Fear': 5,
+        'Disgust': 6,
+        'Surprise': 7
+      },
+      data: [0, 0, 0, 0, 0, 0, 0, 0],
+      colors: [
+        '#9CA3AF', '#3B82F6', '#FCD34D', '#6B7280',
+        '#EF4444', '#7C3AED', '#10B981', '#F59E0B'
+      ]
+    };
+
+    // Function to increase data by label
+    function increaseData(label, amount = 1) {
+      const index = emotionsChart.labelToIndex[label];
+      if (index !== undefined) {
+        emotionsChart.data[index] += amount;
+        emotionChart.update();
+      }
+    }
+
+    // Chart configuration
+    const config = {
+      type: 'bar',
+      data: {
+        labels: emotionsChart.labels,
+        datasets: [{
+          label: 'Emotion Intensity',
+          data: emotionsChart.data,
+          backgroundColor: emotionsChart.colors,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    };
+
+    // Render the emotion chart
+    const emotionChart = new Chart(
+      document.getElementById('emotionChartLoad'),
+      config
+    );
+
+    function connectWebSocket() {
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+      wsAudio.onmessage = (event) => {
+        let data = JSON.parse(event.data);
+        let resultsContainer = document.getElementById("results");
+        if (resultsContainer.textContent.includes("No results yet")) {
+          resultsContainer.textContent = "";
+        }
+
+        const para = document.createElement("p");
+        
+        para.textContent = `Chunk: ${td}sec to ${td+sd}sec - Result: ${data.result}`;
+        td+=sd
+        switch (data.result.toLowerCase()) {
+          case "neutral":
+            para.style.color = "#9CA3AF";
+            break;
+          case "calm":
+            para.style.color = "#3B82F6";
+            break;
+          case "happy":
+            para.style.color = "#FCD34D";
+            break;
+          case "sad":
+            para.style.color = "#6B7280";
+            break;
+          case "angry":
+            para.style.color = "#EF4444";
+            break;
+          case "fear":
+            para.style.color = "#7C3AED";
+            break;
+          case "disgust":
+            para.style.color = "#10B981";
+            break;
+          case "surprise":
+            para.style.color = "#F59E0B";
+            break;
+          default:
+            para.style.color = "red";
+        }
+
+        resultsContainer.appendChild(para);
+        resultsContainer.scrollTop = resultsContainer.scrollHeight;
+
+        increaseData(data.result, 1); // Adds 1 to corresponding emotion's value
+      };
+    }
+
+    async function startRecording() {
+      if (isRecording) return;
+      isRecording = true;
+      segmentDuration = parseInt(document.getElementById("chunkTime").value) || 5000;
+      sd=segmentDuration/1000
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Microphone access denied:", error);
+        return;
+      }
+      mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm; codecs=opus' });
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+        }
+      };
+      function recordSegment() {
+        if (!isRecording) return;
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          setTimeout(recordSegment, 200);
+        }, segmentDuration);
+      }
+      connectWebSocket();
+      recordSegment();
+      document.getElementById("status").textContent = `Recording with chunk time: ${segmentDuration}ms`;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+      startSpectrumAnalyzer(); // Start the spectrum analyzer as well
+    }
+
+    document.getElementById("startBtn").addEventListener("click", startRecording);
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+      stopSpectrumAnalyzer(); // Stop the spectrum analyzer
+    });
+
+    // Spectrum Analyzer Code
+    let audioContext, analyser, microphone, audioProcessorNode;
+    let isMicrophoneActive = false;
+    const fftSize = 2048;
+    const bufferLength = fftSize;
+    const dataArray = new Float32Array(bufferLength);
+    const magnitudeArray = new Float32Array(bufferLength / 2);
+    const spectrogramData = [];
+
+    function startSpectrumAnalyzer() {
+      if (isMicrophoneActive) return;
+
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      const processorCode = `
+        class AudioProcessor extends AudioWorkletProcessor {
+          static get parameterDescriptors() {
+            return [];
+          }
+
+          process(inputs, outputs, parameters) {
+            const input = inputs[0];
+            if (input.length > 0) {
+              this.port.postMessage(input[0][0]);
+            }
+            return true;
+          }
+        }
+
+        registerProcessor('audio-processor', AudioProcessor);
+      `;
+
+      const blob = new Blob([processorCode], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      audioContext.audioWorklet.addModule(url).then(() => {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(stream => {
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = fftSize;
+            microphone = audioContext.createMediaStreamSource(stream);
+            audioProcessorNode = new AudioWorkletNode(audioContext, 'audio-processor');
+
+            microphone.connect(analyser);
+            analyser.connect(audioProcessorNode).connect(audioContext.destination);
+
+            audioProcessorNode.port.onmessage = () => {
+              analyser.getFloatTimeDomainData(dataArray);
+              analyser.getFloatFrequencyData(magnitudeArray);
+              drawOscilloscope();
+              drawMagnitudeSpectrum();
+              updateSpectrogram();
+              drawSpectrogram();
+            };
+          })
+          .catch(err => {
+            console.error('Error accessing the microphone', err);
+          });
+
+        audioContext.resume();
+        isMicrophoneActive = true;
+      });
+    }
+
+    function stopSpectrumAnalyzer() {
+      if (audioContext) {
+        audioContext.close();
+        isMicrophoneActive = false;
+      }
+    }
+
+    function drawOscilloscope() {
+      const canvasCtx = document.getElementById('oscilloscope').getContext('2d');
+      canvasCtx.clearRect(0, 0, oscilloscope.width, oscilloscope.height);
+
+      canvasCtx.beginPath();
+      const sliceWidth = oscilloscope.width * 1.0 / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] * 200.0;
+        const y = oscilloscope.height / 2 + v;
+
+        if (i === 0) {
+          canvasCtx.moveTo(x, y);
+        } else {
+          canvasCtx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      canvasCtx.lineTo(oscilloscope.width, oscilloscope.height / 2);
+      canvasCtx.stroke();
+    }
+
+    function drawMagnitudeSpectrum() {
+      const canvasCtx = document.getElementById('magnitude-spectrum').getContext('2d');
+      canvasCtx.clearRect(0, 0, magnitudeSpectrum.width, magnitudeSpectrum.height);
+
+      const barWidth = (magnitudeSpectrum.width / (bufferLength / 2)) * 2.5;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength / 2; i++) {
+        const barHeight = (magnitudeArray[i] + 140) * 2;
+        canvasCtx.fillStyle = 'rgb(' + Math.floor(barHeight + 100) + ',50,50)';
+        canvasCtx.fillRect(x, magnitudeSpectrum.height - barHeight / 2, barWidth, barHeight / 2);
+        x += barWidth + 1;
+      }
+    }
+
+    function updateSpectrogram() {
+      spectrogramData.push([...magnitudeArray]);
+      if (spectrogramData.length > spectrogram.height) {
+        spectrogramData.shift();
+      }
+    }
+
+    function drawSpectrogram() {
+      const canvasCtx = document.getElementById('spectrogram').getContext('2d');
+      const imageData = canvasCtx.createImageData(spectrogram.width, spectrogram.height);
+
+      for (let y = 0; y < spectrogramData.length; y++) {
+        for (let x = 0; x < bufferLength / 2; x++) {
+          const value = (spectrogramData[y][x] + 140) * 2;
+          const index = (x + y * spectrogram.width) * 4;
+          imageData.data[index] = value; // Red
+          imageData.data[index + 1] = 50; // Green
+          imageData.data[index + 2] = 50; // Blue
+          imageData.data[index + 3] = 255; // Alpha
+        }
+      }
+
+      canvasCtx.putImageData(imageData, 0, 0);
+    }
+  </script>
+</body>
+</html>
