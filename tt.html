@@ -1152,3 +1152,157 @@
   </script>
 </body>
 </html>
+
+
+
+
+
+# HTML page with recording that stops every 5 seconds to produce complete chunks.
+html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Audio Streaming</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; text-align: center; }
+    #status { margin-bottom: 1rem; font-weight: bold; }
+    #results { margin-top: 1rem; border: 1px solid #ccc; padding: 1rem; max-height: 300px; overflow-y: auto; background: #f9f9f9; text-align: left; }
+    button { margin: 0.5rem; padding: 10px 20px; font-size: 16px; border: none; cursor: pointer; border-radius: 5px; }
+    #startBtn { background-color: #28a745; color: white; }
+    #stopBtn { background-color: #dc3545; color: white; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Audio Streaming</h1>
+  <p id="status">Click "Start Recording" to begin streaming audio from your microphone.</p>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  
+  <h2>Results:</h2>
+  <div id="results">No results yet. Please start recording.</div>
+
+  <script>
+    let wsAudio;
+    let mediaRecorder;
+    let audioStream;
+    let isRecording = false;
+    const segmentDuration = 5000; // 5 seconds
+    let reconnectAttempts = 0;
+    const maxReconnects = 5;
+
+    function connectWebSocket() {
+      if (wsAudio && wsAudio.readyState === WebSocket.OPEN) return;
+
+      wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+
+      wsAudio.onopen = () => {
+        console.log("Connected to WebSocket server");
+        document.getElementById("status").textContent = "Connected to server. Ready to record.";
+        reconnectAttempts = 0;
+      };
+
+      wsAudio.onmessage = async (event) => {
+        try {
+          let data = JSON.parse(event.data);
+          console.log(`Received result for chunk ${data.chunkId}: ${data.result}`);
+          const resultsContainer = document.getElementById("results");
+          if (resultsContainer.textContent.includes("No results yet")) {
+            resultsContainer.textContent = "";
+          }
+          const para = document.createElement("p");
+          para.textContent = `Chunk: ${data.chunkId} - Result: ${data.result}`;
+          // Color coding based on result
+          switch (data.result.toLowerCase()) {
+            case "happy": para.style.color = "yellow"; break;
+            case "sad": para.style.color = "darkblue"; break;  // Dark blue for sad
+            case "angry": para.style.color = "red"; break;
+            case "neutral": para.style.color = "gray"; break;
+            case "calm": para.style.color = "blue"; break;  // Blue for calm
+            case "fear": para.style.color = "black"; break;  // Black for fear
+            case "disgust": para.style.color = "green"; break;  // Green for disgust
+            case "surprise": para.style.color = "orange"; break;  // Orange for surprise
+            default: para.style.color = "red";  // Default color if emotion is not recognized
+        }
+          resultsContainer.appendChild(para);
+          resultsContainer.scrollTop = resultsContainer.scrollHeight;
+        } catch (error) {
+          console.error("Error parsing result:", error);
+        }
+      };
+
+      wsAudio.onerror = (error) => console.error("WebSocket error:", error);
+
+      wsAudio.onclose = () => {
+        console.log("WebSocket closed.");
+        if (reconnectAttempts < maxReconnects) {
+          reconnectAttempts++;
+          console.log(`Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnects})`);
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          console.log("Max reconnection attempts reached.");
+        }
+      };
+    }
+
+    connectWebSocket();
+
+    async function startRecording() {
+      if (isRecording) return;
+      isRecording = true;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (error) {
+        console.error("Error accessing microphone:", error);
+        document.getElementById("status").textContent = "Microphone access denied.";
+        document.getElementById("startBtn").disabled = true;
+        return;
+      }
+
+      mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm; codecs=opus' });
+
+      mediaRecorder.ondataavailable = async (event) => {
+        if (event.data && event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+          wsAudio.send(await event.data.arrayBuffer());
+          console.log("Sent a complete audio chunk to the server.");
+        }
+      };
+
+      // Start the cycle of recording segments
+      function recordSegment() {
+        if (!isRecording) return;
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+          // When the 'dataavailable' event fires, recordSegment will be called again.
+          // We delay a bit before starting the next segment to ensure the recorder resets.
+          setTimeout(recordSegment, 200);
+        }, segmentDuration);
+      }
+      
+      recordSegment();
+      document.getElementById("status").textContent = "Recording... Streaming audio in 5-second segments.";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    }
+
+    document.getElementById("startBtn").addEventListener("click", startRecording);
+
+    document.getElementById("stopBtn").addEventListener("click", () => {
+      isRecording = false;
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+      document.getElementById("status").textContent = "Recording stopped.";
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    });
+  </script>
+</body>
+</html>
+"""

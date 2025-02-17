@@ -16,3 +16,9 @@ venv/
 *.sqlite  # If using SQLite DB file (but ignore if using a proper database)
 
 uploads/
+
+# Test File
+
+test.html
+spectrum.html
+tt.html
