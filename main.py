@@ -134,7 +134,7 @@ async def websocket_audio(websocket: WebSocket):
     finally:
         print("Audio WebSocket connection closed.")
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run("your_module:app", host="0.0.0.0", port=8000, reload=True)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("your_module:app", host="0.0.0.0", port=8000, reload=True)
 
