@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html>
 <head>
     <title>Emotion Chart</title>
@@ -63,5 +63,241 @@
             config
         );
     </script>
+</body>
+</html> -->
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merge Audio Chunks and Play</title>
+</head>
+<body>
+  <h2>Record and Merge Audio Chunks</h2>
+  
+  <button onclick="startRecording()">Start Recording</button>
+  <button onclick="stopRecording()">Stop Recording</button>
+  
+  <h3>Player for Merged Audio:</h3>
+  <audio id="audioPlayer" controls></audio>
+  
+  <script>
+    let audioChunks = []; // Array to store recorded audio chunks
+    let mediaRecorder;
+    
+    // Start recording
+    function startRecording() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          mediaRecorder = new MediaRecorder(stream);
+          
+          mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data); // Store audio chunk
+          };
+          
+          mediaRecorder.start();
+        })
+        .catch(error => {
+          console.error('Error accessing microphone: ', error);
+        });
+    }
+    
+    // Stop recording and merge the audio chunks
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+      }
+
+      // Merge audio chunks
+      mergeAudioChunks(audioChunks).then(mergedAudioBlob => {
+        // Create a URL for the merged audio blob
+        const audioUrl = URL.createObjectURL(mergedAudioBlob);
+        
+        // Set the merged audio URL to the player
+        const audioPlayer = document.getElementById('audioPlayer');
+        audioPlayer.src = audioUrl;
+      });
+    }
+    
+    // Function to merge audio chunks and return the merged audio Blob
+    async function mergeAudioChunks(audioChunks) {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      let combinedBuffer = null;
+
+      for (let chunk of audioChunks) {
+        let audioBuffer = await decodeAudioFile(audioContext, chunk);
+
+        if (combinedBuffer === null) {
+          combinedBuffer = audioBuffer;
+        } else {
+          let newBuffer = audioContext.createBuffer(
+            audioBuffer.numberOfChannels,
+            combinedBuffer.length + audioBuffer.length,
+            audioContext.sampleRate
+          );
+
+          for (let channel = 0; channel < combinedBuffer.numberOfChannels; channel++) {
+            newBuffer.getChannelData(channel).set(combinedBuffer.getChannelData(channel));
+          }
+
+          for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+            newBuffer.getChannelData(channel).set(audioBuffer.getChannelData(channel), combinedBuffer.length);
+          }
+
+          combinedBuffer = newBuffer;
+        }
+      }
+
+      // Convert the combined buffer to a Blob (WAV format)
+      return audioBufferToBlob(combinedBuffer);
+    }
+
+    // Decode the audio file into an AudioBuffer
+    function decodeAudioFile(audioContext, audioFile) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          audioContext.decodeAudioData(event.target.result, (buffer) => {
+            resolve(buffer);
+          }, reject);
+        };
+        reader.readAsArrayBuffer(audioFile);
+      });
+    }
+
+    // Convert AudioBuffer to Blob (WAV format)
+    function audioBufferToBlob(audioBuffer) {
+      const wavEncoder = new WaveFile();
+      wavEncoder.fromScratch(audioBuffer.numberOfChannels, audioBuffer.length, audioBuffer.sampleRate);
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        wavEncoder.channelData[channel] = audioBuffer.getChannelData(channel);
+      }
+      const buffer = wavEncoder.toBuffer();
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+  </script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wavefile/1.2.7/wavefile.min.js"></script>
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merge Audio Chunks and Play</title>
+</head>
+<body>
+  <h2>Record and Merge Audio Chunks</h2>
+  
+  <button onclick="startRecording()">Start Recording</button>
+  <button onclick="stopRecording()">Stop Recording</button>
+  
+  <h3>Player for Merged Audio:</h3>
+  <audio id="audioPlayer" controls></audio>
+  
+  <script>
+    let audioChunks = []; // Array to store recorded audio chunks
+    let mediaRecorder;
+    
+    // Start recording
+    function startRecording() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          mediaRecorder = new MediaRecorder(stream);
+          
+          mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data); // Store audio chunk
+          };
+          
+          mediaRecorder.start();
+        })
+        .catch(error => {
+          console.error('Error accessing microphone: ', error);
+        });
+    }
+    
+    // Stop recording and merge the audio chunks
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+      }
+
+      // Merge audio chunks
+      mergeAudioChunks(audioChunks).then(mergedAudioBlob => {
+        // Create a URL for the merged audio blob
+        const audioUrl = URL.createObjectURL(mergedAudioBlob);
+        
+        // Set the merged audio URL to the player
+        const audioPlayer = document.getElementById('audioPlayer');
+        audioPlayer.src = audioUrl;
+      });
+    }
+    
+    // Function to merge audio chunks and return the merged audio Blob
+    async function mergeAudioChunks(audioChunks) {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      let combinedBuffer = null;
+
+      for (let chunk of audioChunks) {
+        let audioBuffer = await decodeAudioFile(audioContext, chunk);
+
+        if (combinedBuffer === null) {
+          combinedBuffer = audioBuffer;
+        } else {
+          let newBuffer = audioContext.createBuffer(
+            audioBuffer.numberOfChannels,
+            combinedBuffer.length + audioBuffer.length,
+            audioContext.sampleRate
+          );
+
+          for (let channel = 0; channel < combinedBuffer.numberOfChannels; channel++) {
+            newBuffer.getChannelData(channel).set(combinedBuffer.getChannelData(channel));
+          }
+
+          for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+            newBuffer.getChannelData(channel).set(audioBuffer.getChannelData(channel), combinedBuffer.length);
+          }
+
+          combinedBuffer = newBuffer;
+        }
+      }
+
+      // Convert the combined buffer to a Blob (WAV format)
+      return audioBufferToBlob(combinedBuffer);
+    }
+
+    // Decode the audio file into an AudioBuffer
+    function decodeAudioFile(audioContext, audioFile) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          audioContext.decodeAudioData(event.target.result, (buffer) => {
+            resolve(buffer);
+          }, reject);
+        };
+        reader.readAsArrayBuffer(audioFile);
+      });
+    }
+
+    // Convert AudioBuffer to Blob (WAV format)
+    function audioBufferToBlob(audioBuffer) {
+      const wavEncoder = new WaveFile();
+      wavEncoder.fromScratch(audioBuffer.numberOfChannels, audioBuffer.length, audioBuffer.sampleRate);
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        wavEncoder.channelData[channel] = audioBuffer.getChannelData(channel);
+      }
+      const buffer = wavEncoder.toBuffer();
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+  </script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wavefile/1.2.7/wavefile.min.js"></script>
 </body>
 </html>

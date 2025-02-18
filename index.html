@@ -41,6 +41,8 @@
   <button id="startBtn">Start Recording</button>
   <button id="stopBtn" disabled>Stop Recording</button>
   <p id="status">Set chunk time and click "Start Recording".</p>
+  <audio id="playback" controls style="display: none; margin-top: 1rem;  margin:auto; text-align: center"></audio>
+  
   
   <div class="container">
     <div class="left-panel">
@@ -67,6 +69,8 @@
     let chunkIds = [];
     let td=0
     let sd = 5
+    let audioChunks = [];
+
     // Emotion configuration
     const emotionsChart = {
       labels: ['Neutral', 'Calm', 'Happy', 'Sad', 'Angry', 'Fear', 'Disgust', 'Surprise'],
@@ -173,6 +177,7 @@
     async function startRecording() {
       if (isRecording) return;
       isRecording = true;
+      audioChunks = []; // Reset audio chunks array
       segmentDuration = parseInt(document.getElementById("chunkTime").value) || 5000;
       sd=segmentDuration/1000
       try {
@@ -184,8 +189,9 @@
       mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm; codecs=opus' });
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
-          wsAudio.send(await event.data.arrayBuffer());
-        }
+            wsAudio.send(await event.data.arrayBuffer());
+          }
+          await audioChunks.push(event.data); // Store the audio chunk
       };
       function recordSegment() {
         if (!isRecording) return;
@@ -216,6 +222,16 @@
       document.getElementById("startBtn").disabled = false;
       document.getElementById("stopBtn").disabled = true;
       stopSpectrumAnalyzer(); // Stop the spectrum analyzer
+
+      // Create and display the audio player
+      if (audioChunks.length > 0) {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audioPlayer = document.getElementById('playback');
+        audioPlayer.src = audioUrl;
+        audioPlayer.style.display = 'block';
+      }
+
     });
 
     // Spectrum Analyzer Code
@@ -355,3 +371,4 @@
   </script>
 </body>
 </html>
+
