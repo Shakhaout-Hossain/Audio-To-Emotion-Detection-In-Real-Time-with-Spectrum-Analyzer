@@ -1,0 +1,920 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segmented Audio Spectrum</title>
+    <style>
+        body { text-align: center; background: black; color: white; }
+        #spectrum-container {
+            display: flex; 
+            overflow-x: auto; 
+            white-space: nowrap; 
+            padding: 10px;
+            background: #111;
+        }
+        canvas { background: black; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <input type="file" id="audioFile" accept="audio/*">
+    <audio id="audio" controls></audio>
+    <div id="spectrum-container"></div>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const fileInput = document.getElementById("audioFile");
+        const spectrumContainer = document.getElementById("spectrum-container");
+
+        let audioCtx, analyser, source, bufferLength, dataArray;
+        let segmentInterval = 5000; // 5 seconds
+
+        fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+                setupAudioContext();
+            }
+        });
+
+        function setupAudioContext() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioCtx.createAnalyser();
+            source = audioCtx.createMediaElementSource(audio);
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+
+            analyser.fftSize = 256;
+            bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+
+            setInterval(captureSegment, segmentInterval);
+        }
+
+        function captureSegment() {
+            if (!audio.paused && !audio.ended) {
+                analyser.getByteFrequencyData(dataArray);
+                renderSegment(new Uint8Array(dataArray));
+            }
+        }
+
+        function renderSegment(segmentData) {
+            const canvas = document.createElement("canvas");
+            canvas.width = 100; // Small fixed width for each segment
+            canvas.height = 100;
+            spectrumContainer.appendChild(canvas);
+
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = segmentData[i] / 2;
+                ctx.fillStyle = `rgb(${barHeight + 100}, 50, 150)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+    </script>
+</body>
+</html>
+
+ -->
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Audio Spectrum</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        #spectrum-container {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 10px;
+            background: #111;
+        }
+        .segment {
+            text-align: center;
+            margin-right: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .segment:hover {
+            transform: scale(1.1);
+        }
+        .active {
+            border: 2px solid yellow;
+        }
+        canvas { background: black; display: block; }
+        .timestamp {
+            font-size: 12px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="audioFile" accept="audio/*">
+    <audio id="audio" controls></audio>
+    <div id="spectrum-container"></div>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const fileInput = document.getElementById("audioFile");
+        const spectrumContainer = document.getElementById("spectrum-container");
+
+        let audioCtx, analyser, source, bufferLength, dataArray;
+        let segmentInterval = 6000; // 5 seconds
+        let segments = [];
+
+        fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+                setupAudioContext();
+            }
+        });
+
+        function setupAudioContext() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioCtx.createAnalyser();
+            source = audioCtx.createMediaElementSource(audio);
+            source.connect(analyser);
+            analyser.connect(audioCtx.destination);
+
+            analyser.fftSize = 256;
+            bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+
+            setInterval(captureSegment, segmentInterval);
+            requestAnimationFrame(updateActiveSegment);
+        }
+
+        function captureSegment() {
+            if (!audio.paused && !audio.ended) {
+                analyser.getByteFrequencyData(dataArray);
+                const timeStamp = Math.floor(audio.currentTime);
+                renderSegment(new Uint8Array(dataArray), timeStamp);
+            }
+        }
+
+        function renderSegment(segmentData, timeStamp) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.classList.add("segment");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 100;
+            canvas.height = 100;
+            segmentDiv.appendChild(canvas);
+
+            const timestampLabel = document.createElement("div");
+            timestampLabel.classList.add("timestamp");
+            timestampLabel.textContent = formatTime(timeStamp);
+            segmentDiv.appendChild(timestampLabel);
+
+            segmentDiv.dataset.time = timeStamp; // Store time for seeking
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = timeStamp;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+
+            drawSpectrum(canvas, segmentData);
+        }
+
+        function drawSpectrum(canvas, segmentData) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = segmentData[i] / 2;
+                ctx.fillStyle = `rgb(${barHeight + 100}, 50, 150)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+
+        function updateActiveSegment() {
+            requestAnimationFrame(updateActiveSegment);
+
+            const currentTime = Math.floor(audio.currentTime);
+            segments.forEach(segment => {
+                const segmentTime = parseInt(segment.dataset.time);
+                if (segmentTime === currentTime) {
+                    segment.classList.add("active");
+                } else {
+                    segment.classList.remove("active");
+                }
+            });
+        }
+
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec < 10 ? "0" + sec : sec}`;
+        }
+    </script>
+</body>
+</html> -->
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Audio Spectrum with Waveform</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        #waveform-container {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        #waveform {
+            background: black;
+            width: 80%;
+            height: 100px;
+            display: block;
+            margin: auto;
+        }
+        #spectrum-container {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 10px;
+            background: #111;
+        }
+        .segment {
+            text-align: center;
+            margin-right: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .segment:hover {
+            transform: scale(1.1);
+        }
+        .active {
+            border: 2px solid yellow;
+        }
+        canvas { background: black; display: block; }
+        .timestamp {
+            font-size: 12px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="audioFile" accept="audio/*">
+    <audio id="audio" controls></audio>
+
+    <div id="waveform-container">
+        <canvas id="waveform"></canvas>
+    </div>
+
+    <div id="spectrum-container"></div>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const fileInput = document.getElementById("audioFile");
+        const spectrumContainer = document.getElementById("spectrum-container");
+        const waveformCanvas = document.getElementById("waveform");
+
+        let audioCtx, analyser, waveformAnalyser, source, bufferLength, dataArray, waveformArray;
+        let segmentInterval = 5000; // 5 seconds
+        let segments = [];
+
+        fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+                setupAudioContext();
+            }
+        });
+
+        function setupAudioContext() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Analyser for spectrum (frequencies)
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+
+            // Analyser for waveform (time domain)
+            waveformAnalyser = audioCtx.createAnalyser();
+            waveformAnalyser.fftSize = 1024;
+            waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+
+            // Connect audio nodes
+            source = audioCtx.createMediaElementSource(audio);
+            source.connect(analyser);
+            source.connect(waveformAnalyser);
+            analyser.connect(audioCtx.destination);
+
+            // Start waveform visualization
+            requestAnimationFrame(drawWaveform);
+            setInterval(captureSegment, segmentInterval);
+            requestAnimationFrame(updateActiveSegment);
+        }
+
+        function drawWaveform() {
+            requestAnimationFrame(drawWaveform);
+
+            waveformAnalyser.getByteTimeDomainData(waveformArray);
+            const ctx = waveformCanvas.getContext("2d");
+            waveformCanvas.width = window.innerWidth * 0.8;
+            waveformCanvas.height = 100;
+            ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "cyan";
+            ctx.beginPath();
+
+            let sliceWidth = waveformCanvas.width / waveformArray.length;
+            let x = 0;
+
+            for (let i = 0; i < waveformArray.length; i++) {
+                let v = waveformArray[i] / 128.0;
+                let y = (v * waveformCanvas.height) / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.stroke();
+        }
+
+        function captureSegment() {
+            if (!audio.paused && !audio.ended) {
+                analyser.getByteFrequencyData(dataArray);
+                const timeStamp = Math.floor(audio.currentTime);
+                renderSegment(new Uint8Array(dataArray), timeStamp);
+            }
+        }
+
+        /*function renderSegment(segmentData, timeStamp) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.classList.add("segment");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 100;
+            canvas.height = 100;
+            segmentDiv.appendChild(canvas);
+
+            const timestampLabel = document.createElement("div");
+            timestampLabel.classList.add("timestamp");
+            timestampLabel.textContent = formatTime(timeStamp);
+            segmentDiv.appendChild(timestampLabel);
+
+            segmentDiv.dataset.time = timeStamp;
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = timeStamp;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+
+            drawSpectrum(canvas, segmentData);
+        }*/
+
+        function renderSegment(segmentData, timeStamp) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.classList.add("segment");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 100;
+            canvas.height = 100;
+            segmentDiv.appendChild(canvas);
+
+            const timestampLabel = document.createElement("div");
+            timestampLabel.classList.add("timestamp");
+            // Add "neutral" after timestamp
+            timestampLabel.textContent = `${formatTime(timeStamp)} neutral`;  // Modified line
+            segmentDiv.appendChild(timestampLabel);
+
+            segmentDiv.dataset.time = timeStamp;
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = timeStamp;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+
+            drawSpectrum(canvas, segmentData);
+        }
+
+        function drawSpectrum(canvas, segmentData) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = segmentData[i] / 2;
+                ctx.fillStyle = `rgb(${barHeight + 100}, 50, 150)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+
+        function updateActiveSegment() {
+            requestAnimationFrame(updateActiveSegment);
+
+            const currentTime = Math.floor(audio.currentTime);
+            segments.forEach(segment => {
+                const segmentTime = parseInt(segment.dataset.time);
+                if (segmentTime === currentTime) {
+                    segment.classList.add("active");
+                } else {
+                    segment.classList.remove("active");
+                }
+            });
+        }
+
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec < 10 ? "0" + sec : sec}`;
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Audio Spectrum with Waveform</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        #waveform-container {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        #waveform {
+            background: black;
+            width: 80%;
+            height: 100px;
+            display: block;
+            margin: auto;
+        }
+        #spectrum-container {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 10px;
+            background: #111;
+            scroll-behavior: smooth;
+        }
+        .segment {
+            text-align: center;
+            margin-right: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .segment:hover {
+            transform: scale(1.1);
+        }
+        .active {
+            border: 2px solid yellow;
+        }
+        canvas { background: black; display: block; }
+        .timestamp {
+            font-size: 12px;
+            color: #ccc;
+        }
+        #exportButton {
+            margin-top: 10px;
+            padding: 8px 15px;
+            font-size: 14px;
+            background: green;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="audioFile" accept="audio/*">
+    <audio id="audio" controls></audio>
+
+    <div id="waveform-container">
+        <canvas id="waveform"></canvas>
+    </div>
+
+    <div id="spectrum-container"></div>
+
+    <button id="exportButton">Download Spectrum Data</button>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const fileInput = document.getElementById("audioFile");
+        const spectrumContainer = document.getElementById("spectrum-container");
+        const waveformCanvas = document.getElementById("waveform");
+        const exportButton = document.getElementById("exportButton");
+
+        let audioCtx, analyser, waveformAnalyser, source, bufferLength, dataArray, waveformArray;
+        let segmentInterval = 5000; // 5 seconds
+        let segments = [];
+        let spectrumData = []; // Store spectrum data for export
+
+        fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+
+                // Ensure AudioContext starts when user interacts
+                audio.addEventListener("play", setupAudioContext, { once: true });
+            }
+        });
+
+        function setupAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Create an audio source
+                source = audioCtx.createMediaElementSource(audio);
+
+                // Create Analyser for Frequency Spectrum
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+
+                // Create Analyser for Waveform
+                waveformAnalyser = audioCtx.createAnalyser();
+                waveformAnalyser.fftSize = 1024;
+                waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+
+                // Connect audio nodes (Fix: Allow sound playback)
+                source.connect(analyser);
+                source.connect(waveformAnalyser);
+                source.connect(audioCtx.destination); // ✅ Now audio plays!
+
+                // Start visualizations
+                requestAnimationFrame(drawWaveform);
+                setInterval(captureSegment, segmentInterval);
+                requestAnimationFrame(updateActiveSegment);
+            }
+        }
+
+        function drawWaveform() {
+            requestAnimationFrame(drawWaveform);
+
+            waveformAnalyser.getByteTimeDomainData(waveformArray);
+            const ctx = waveformCanvas.getContext("2d");
+            waveformCanvas.width = window.innerWidth * 0.8;
+            waveformCanvas.height = 100;
+            ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "cyan";
+            ctx.beginPath();
+
+            let sliceWidth = waveformCanvas.width / waveformArray.length;
+            let x = 0;
+
+            for (let i = 0; i < waveformArray.length; i++) {
+                let v = waveformArray[i] / 128.0;
+                let y = (v * waveformCanvas.height) / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.stroke();
+        }
+
+        function captureSegment() {
+            if (!audio.paused && !audio.ended) {
+                analyser.getByteFrequencyData(dataArray);
+                const timeStamp = Math.floor(audio.currentTime);
+                renderSegment(new Uint8Array(dataArray), timeStamp);
+                spectrumData.push({ time: timeStamp, frequencies: [...dataArray] });
+            }
+        }
+
+        function renderSegment(segmentData, timeStamp) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.classList.add("segment");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 100;
+            canvas.height = 100;
+            segmentDiv.appendChild(canvas);
+
+            const timestampLabel = document.createElement("div");
+            timestampLabel.classList.add("timestamp");
+            timestampLabel.textContent = formatTime(timeStamp);
+            segmentDiv.appendChild(timestampLabel);
+
+            segmentDiv.dataset.time = timeStamp;
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = timeStamp;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+
+            drawSpectrum(canvas, segmentData);
+        }
+
+        function drawSpectrum(canvas, segmentData) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = segmentData[i] / 2;
+                ctx.fillStyle = `rgb(${barHeight + 100}, 50, 150)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+
+        function updateActiveSegment() {
+            requestAnimationFrame(updateActiveSegment);
+
+            const currentTime = Math.floor(audio.currentTime);
+            segments.forEach(segment => {
+                const segmentTime = parseInt(segment.dataset.time);
+                if (segmentTime === currentTime) {
+                    segment.classList.add("active");
+                    segment.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                } else {
+                    segment.classList.remove("active");
+                }
+            });
+        }
+
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec < 10 ? "0" + sec : sec}`;
+        }
+
+        exportButton.addEventListener("click", () => {
+            const blob = new Blob([JSON.stringify(spectrumData, null, 2)], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "spectrum_data.json";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html> -->
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Spectrum & Waveform Visualizer</title>
+    <style>
+        body { text-align: center; background: black; color: white; font-family: Arial, sans-serif; }
+        #waveform-container { text-align: center; margin-bottom: 10px; }
+        #waveform { background: black; width: 80%; height: 100px; display: block; margin: auto; }
+        #spectrum-container {
+            display: flex; overflow-x: auto; white-space: nowrap;
+            padding: 10px; background: #111; scroll-behavior: smooth;
+        }
+        .segment { text-align: center; margin-right: 5px; cursor: pointer; transition: transform 0.2s; }
+        .segment:hover { transform: scale(1.1); }
+        .active { border: 2px solid yellow; }
+        canvas { background: black; display: block; }
+        .timestamp { font-size: 12px; color: #ccc; }
+        #exportButton {
+            margin-top: 10px; padding: 8px 15px; font-size: 14px;
+            background: green; color: white; border: none; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="audioFile" accept="audio/*">
+    <audio id="audio" controls></audio>
+
+    <div id="waveform-container">
+        <canvas id="waveform"></canvas>
+    </div>
+
+    <div id="spectrum-container"></div>
+
+    <button id="exportButton">Download Spectrum Data</button>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const fileInput = document.getElementById("audioFile");
+        const spectrumContainer = document.getElementById("spectrum-container");
+        const waveformCanvas = document.getElementById("waveform");
+        const exportButton = document.getElementById("exportButton");
+
+        let audioCtx, analyser, waveformAnalyser, bufferLength, dataArray, waveformArray;
+        let segmentInterval = 5000; // 5 seconds
+        let segments = [];
+        let spectrumData = [];
+        let sourceNode = null;
+
+        fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+                audio.load(); // ✅ Ensure the audio player loads correctly
+                
+                // Wait for user interaction before playing (fixes autoplay issues)
+                audio.addEventListener("canplaythrough", () => {
+                    audio.play().catch(() => console.log("Autoplay prevented, user must click Play"));
+                }, { once: true });
+
+                setupAudioContext();
+            }
+        });
+
+        function setupAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Create Analyser for Spectrum
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+
+                // Create Analyser for Waveform
+                waveformAnalyser = audioCtx.createAnalyser();
+                waveformAnalyser.fftSize = 1024;
+                waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+
+                // ✅ Fix: Remove old source node before creating a new one
+                if (sourceNode) {
+                    sourceNode.disconnect();
+                    sourceNode = null;
+                }
+
+                // ✅ Fix: Only create the source once per file load
+                sourceNode = audioCtx.createMediaElementSource(audio);
+                sourceNode.connect(analyser);
+                sourceNode.connect(waveformAnalyser);
+                sourceNode.connect(audioCtx.destination); // ✅ Ensures sound output
+
+                // Start visualizations
+                requestAnimationFrame(drawWaveform);
+                setInterval(captureSegment, segmentInterval);
+                requestAnimationFrame(updateActiveSegment);
+            }
+        }
+
+        function drawWaveform() {
+            requestAnimationFrame(drawWaveform);
+
+            waveformAnalyser.getByteTimeDomainData(waveformArray);
+            const ctx = waveformCanvas.getContext("2d");
+            waveformCanvas.width = window.innerWidth * 0.8;
+            waveformCanvas.height = 100;
+            ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "cyan";
+            ctx.beginPath();
+
+            let sliceWidth = waveformCanvas.width / waveformArray.length;
+            let x = 0;
+
+            for (let i = 0; i < waveformArray.length; i++) {
+                let v = waveformArray[i] / 128.0;
+                let y = (v * waveformCanvas.height) / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.stroke();
+        }
+
+        function captureSegment() {
+            if (!audio.paused && !audio.ended) {
+                analyser.getByteFrequencyData(dataArray);
+                const timeStamp = Math.floor(audio.currentTime);
+                renderSegment(new Uint8Array(dataArray), timeStamp);
+                spectrumData.push({ time: timeStamp, frequencies: [...dataArray] });
+            }
+        }
+
+        function renderSegment(segmentData, timeStamp) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.classList.add("segment");
+
+            const canvas = document.createElement("canvas");
+            canvas.width = 100;
+            canvas.height = 100;
+            segmentDiv.appendChild(canvas);
+
+            const timestampLabel = document.createElement("div");
+            timestampLabel.classList.add("timestamp");
+            timestampLabel.textContent = formatTime(timeStamp);
+            segmentDiv.appendChild(timestampLabel);
+
+            segmentDiv.dataset.time = timeStamp;
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = timeStamp;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+
+            drawSpectrum(canvas, segmentData);
+        }
+
+        function drawSpectrum(canvas, segmentData) {
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = segmentData[i] / 2;
+                ctx.fillStyle = `rgb(${barHeight + 100}, 50, 150)`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+
+        function updateActiveSegment() {
+            requestAnimationFrame(updateActiveSegment);
+
+            const currentTime = Math.floor(audio.currentTime);
+            segments.forEach(segment => {
+                const segmentTime = parseInt(segment.dataset.time);
+                if (segmentTime === currentTime) {
+                    segment.classList.add("active");
+                    segment.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                } else {
+                    segment.classList.remove("active");
+                }
+            });
+        }
+
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec < 10 ? "0" + sec : sec}`;
+        }
+
+        exportButton.addEventListener("click", () => {
+            const blob = new Blob([JSON.stringify(spectrumData, null, 2)], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "spectrum_data.json";
+            link.click();
+        });
+    </script>
+</body>
+</html> -->

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import os
 import shutil
 import asyncio
@@ -8,6 +9,10 @@ from fastapi.websockets import WebSocketState
 from loadStatic import predict, static
 
 app = FastAPI()
+
+
+# Serve static files (Ensure you have a 'static' folder)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)  # Ensure the upload directory exists
@@ -28,6 +33,14 @@ async def startup_event():
     predict.loaded_model = static.loaded_model
     predict.scaler2 = static.scaler2
     predict.encoder2 = static.encoder2  # Ensure proper dependency assignment
+    
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Serve the favicon.ico file."""
+    favicon_path = "static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/vnd.microsoft.icon")
+    return {"error": "Favicon not found"}
 
 @app.get("/fastapi/")
 def read_root():

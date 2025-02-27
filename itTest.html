@@ -7,7 +7,7 @@
       Audio To Emotion Detection In Real Time with Spectrum Analyzer
     </title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- <script src="static/audio.js" defer></script> -->
+    <script src="static/audio.js" defer></script>
     <link
       rel="stylesheet"
       href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
@@ -79,11 +79,18 @@
         margin-top: 15px;
         font-weight: bold;
       }
+
       /* spectrum */
+
       #visualization-container {
         width: 80%;
         margin: 20px auto;
       }
+      /*canvas { 
+        background: #000; 
+        display: block; 
+        margin: 10px auto;
+    }*/
       #realTimeSpectrum {
         height: 150px;
         background: #111;
@@ -134,11 +141,11 @@
     <button id="startBtn">Start Recording</button>
     <button id="stopBtn" disabled>Stop Recording</button>
     <p id="status">Set chunk time and click "Start Recording".</p>
-    <!-- <audio
+    <audio
       id="playback"
       controls
       style="display: none; margin-top: 1rem; margin: auto; text-align: center"
-    ></audio> -->
+    ></audio>
 
     <div class="container">
       <div class="left-panel">
@@ -150,11 +157,12 @@
         </div>
         <div id="audio-spectrum-label">Audio Spectrum Analyzer</div>
         <canvas id="oscilloscope" class="my-3"></canvas>
+        <!-- <canvas id="magnitude-spectrum" class="my-3"></canvas>
+      <canvas id="spectrogram" class="my-3"></canvas> -->
       </div>
     </div>
 
-    <!-- <input type="file" id="audioFile" accept="audio/*" /> -->
-    <h1>Full Audio Analysis</h1>
+    <input type="file" id="audioFile" accept="audio/*" />
     <audio id="audio" controls></audio>
 
     <div id="visualization-container">
@@ -165,103 +173,6 @@
     <div id="spectrum-container"></div>
 
     <script>
-      // --- Helper functions for merging and exporting audio ---
-      async function mergeAndExportAudio(chunks) {
-        const audioContext = new (window.AudioContext ||
-          window.webkitAudioContext)();
-        const decodedBuffers = [];
-        for (const chunk of chunks) {
-          const arrayBuffer = await chunk.arrayBuffer();
-          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-          decodedBuffers.push(audioBuffer);
-        }
-        if (decodedBuffers.length === 0) {
-          return null;
-        }
-        const sampleRate = decodedBuffers[0].sampleRate;
-        const numberOfChannels = decodedBuffers[0].numberOfChannels;
-        const totalLength = decodedBuffers.reduce(
-          (sum, buffer) => sum + buffer.length,
-          0
-        );
-        const mergedBuffer = audioContext.createBuffer(
-          numberOfChannels,
-          totalLength,
-          sampleRate
-        );
-        for (let channel = 0; channel < numberOfChannels; channel++) {
-          let offset = 0;
-          for (const buffer of decodedBuffers) {
-            mergedBuffer
-              .getChannelData(channel)
-              .set(buffer.getChannelData(channel), offset);
-            offset += buffer.length;
-          }
-        }
-        const wavBlob = bufferToWav(mergedBuffer);
-        return wavBlob;
-      }
-
-      function bufferToWav(buffer) {
-        const numOfChan = buffer.numberOfChannels;
-        const sampleRate = buffer.sampleRate;
-        const format = 1; // PCM
-        const bitDepth = 16;
-        const numSamples = buffer.length;
-        const blockAlign = (numOfChan * bitDepth) / 8;
-        const byteRate = sampleRate * blockAlign;
-        const dataSize = numSamples * blockAlign;
-        const bufferLength = 44 + dataSize;
-        const arrayBuffer = new ArrayBuffer(bufferLength);
-        const view = new DataView(arrayBuffer);
-
-        writeString(view, 0, "RIFF");
-        view.setUint32(4, 36 + dataSize, true);
-        writeString(view, 8, "WAVE");
-        writeString(view, 12, "fmt ");
-        view.setUint32(16, 16, true);
-        view.setUint16(20, format, true);
-        view.setUint16(22, numOfChan, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, byteRate, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bitDepth, true);
-        writeString(view, 36, "data");
-        view.setUint32(40, dataSize, true);
-
-        let offset = 44;
-        if (numOfChan === 2) {
-          const channel0 = buffer.getChannelData(0);
-          const channel1 = buffer.getChannelData(1);
-          for (let i = 0; i < numSamples; i++) {
-            let sample = Math.max(-1, Math.min(1, channel0[i]));
-            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-            view.setInt16(offset, sample, true);
-            offset += 2;
-            sample = Math.max(-1, Math.min(1, channel1[i]));
-            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-            view.setInt16(offset, sample, true);
-            offset += 2;
-          }
-        } else {
-          const channelData = buffer.getChannelData(0);
-          for (let i = 0; i < numSamples; i++) {
-            let sample = Math.max(-1, Math.min(1, channelData[i]));
-            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-            view.setInt16(offset, sample, true);
-            offset += 2;
-          }
-        }
-        return new Blob([arrayBuffer], { type: "audio/wav" });
-      }
-
-      function writeString(view, offset, string) {
-        for (let i = 0; i < string.length; i++) {
-          view.setUint8(offset + i, string.charCodeAt(i));
-        }
-      }
-
-      // --- Main variables and configuration ---
       const audio = document.getElementById("audio");
       let wsAudio;
       let mediaRecorder;
@@ -273,8 +184,7 @@
       let td = 0;
       let sd = 5;
       let audioChunks = [];
-      let segmentEmotion = {};
-      //const segmentEmotion = new Map();
+      let segmentEmotion = [];
       let chunk;
 
       // Emotion configuration
@@ -359,12 +269,11 @@
           }
 
           const para = document.createElement("p");
+
           para.textContent = `Chunk: ${td}sec to ${td + sd}sec - Result: ${
             data.result
           }`;
-          //segmentEmotion.set(td, data.result);
-          segmentEmotion[td] = data.result;
-          //console.log(td + " " + segmentEmotion[td]);
+          //segmentEmotion.append([chunk, data.result])
           td += sd;
           switch (data.result.toLowerCase()) {
             case "neutral":
@@ -397,6 +306,7 @@
 
           resultsContainer.appendChild(para);
           resultsContainer.scrollTop = resultsContainer.scrollHeight;
+
           increaseData(data.result, 1); // Adds 1 to corresponding emotion's value
         };
       }
@@ -423,10 +333,9 @@
           if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
             wsAudio.send(await event.data.arrayBuffer());
           }
-          audioChunks.push(event.data); // Store the audio chunk
+          await audioChunks.push(event.data); // Store the audio chunk
           chunk = event.data;
         };
-
         function recordSegment() {
           if (!isRecording) return;
           mediaRecorder.start();
@@ -448,9 +357,7 @@
       document
         .getElementById("startBtn")
         .addEventListener("click", startRecording);
-
-      // Updated stop handler that merges audio chunks into a proper WAV file
-      document.getElementById("stopBtn").addEventListener("click", async () => {
+      document.getElementById("stopBtn").addEventListener("click", () => {
         isRecording = false;
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
           mediaRecorder.stop();
@@ -463,26 +370,90 @@
         document.getElementById("stopBtn").disabled = true;
         stopSpectrumAnalyzer(); // Stop the spectrum analyzer
 
-        if (audioChunks.length > 0) {
-          const wavBlob = await mergeAndExportAudio(audioChunks);
-          if (wavBlob) {
-            const audioUrl = URL.createObjectURL(wavBlob);
-            //const audioPlayer = document.getElementById("playback");
-            //audioPlayer.src = audioUrl;
-            //audioPlayer.style.display = "block";
+        // Stop recording and finalize
+        function stopRecording() {
+          return new Promise((resolve) => {
+            mediaRecorder.ondataavailable = (e) => {
+              audioChunks.push(e.data); // Capture final chunk
+            };
+            mediaRecorder.onstop = () => {
+              const audioBlob = new Blob(audioChunks, {
+                type: MediaRecorder.isTypeSupported("audio/webm")
+                  ? "audio/webm"
+                  : "audio/wav",
+              });
+              resolve(audioBlob); // Now the blob has metadata
+            };
+            mediaRecorder.stop();
+          });
+        }
 
-            //audioPlayer.onloadedmetadata = () => {
-            // console.log("Actual duration:", audioPlayer.duration);
-            //};
-            // For spectrum analyzer purposes
-            audio.src = audioUrl;
-            setupAudioContext();
-          }
+        // Usage
+        async function mergeAndPlay() {
+          const blob = await stopRecording();
+          const audioUrl = URL.createObjectURL(blob);
+          const audioPlayer = document.getElementById("playback");
+          audioPlayer.src = audioUrl;
+          audioPlayer.style.display = "block";
+
+          audioPlayer.onloadedmetadata = () => {
+            console.log("Duration:", audioPlayer.duration); // Correct duration
+          };
+          audio.src = audioUrl;
+          setupAudioContext();
           audioChunks = [];
         }
+
+        // Create and display the audio player
+        if (audioChunks.length > 0) {
+          mergeAndPlay();
+          //playMergedAudio(audioChunks);
+          //const audioBlob = new Blob(audioChunks, { type: 'audio/webm; codecs=opus' });
+
+          //const audioBlob = new Blob(audioChunks, {
+          // type: MediaRecorder.isTypeSupported("audio/webm; codecs=opus")
+          //    ? "audio/webm; codecs=opus"
+          //     : "audio/wav",
+          // });
+          /*const audioUrl = URL.createObjectURL(audioBlob);
+          const audioPlayer = document.getElementById("playback");
+          audioPlayer.src = audioUrl;
+          audioPlayer.style.display = "block";
+
+          audioPlayer.onloadedmetadata = () => {
+            console.log("Actual duration:", audioPlayer.duration);
+          };
+          // for spectrum
+          audio.src = audioUrl;
+          setupAudioContext();
+          audioChunks = [];*/
+        }
+
+        //Convert the merged buffer to a playable URL
+        /* async function playMergedAudio(chunks) {
+          try {
+            console.log("hello");
+
+            const mergedBuffer = await mergeWavChunks(chunks);
+            const blob = new Blob([mergedBuffer], { type: "audio/wav" });
+            const url = URL.createObjectURL(blob);
+
+            const audioPlayer = document.getElementById("playback");
+            audioPlayer.src = url;
+
+            audio.src = url;
+            setupAudioContext();
+            audioChunks = [];
+
+            // Cleanup memory after playback
+            audioPlayer.onended = () => URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error("Error:", error);
+          }
+        }*/
       });
 
-      // --- Spectrum Analyzer Code ---
+      // Spectrum Analyzer Code
       let audioContext, analyser, microphone, audioProcessorNode;
       let isMicrophoneActive = false;
       const fftSize = 2048;
@@ -495,11 +466,13 @@
         if (isMicrophoneActive) return;
 
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
         const processorCode = `
         class AudioProcessor extends AudioWorkletProcessor {
           static get parameterDescriptors() {
             return [];
           }
+
           process(inputs, outputs, parameters) {
             const input = inputs[0];
             if (input.length > 0) {
@@ -508,8 +481,10 @@
             return true;
           }
         }
+
         registerProcessor('audio-processor', AudioProcessor);
       `;
+
         const blob = new Blob([processorCode], {
           type: "application/javascript",
         });
@@ -525,19 +500,25 @@
                 audioContext,
                 "audio-processor"
               );
+
               microphone.connect(analyser);
               analyser
                 .connect(audioProcessorNode)
                 .connect(audioContext.destination);
+
               audioProcessorNode.port.onmessage = () => {
                 analyser.getFloatTimeDomainData(dataArray);
                 analyser.getFloatFrequencyData(magnitudeArray);
                 drawOscilloscope();
+                //drawMagnitudeSpectrum();
+                //updateSpectrogram();
+                //drawSpectrogram();
               };
             })
             .catch((err) => {
               console.error("Error accessing the microphone", err);
             });
+
           audioContext.resume();
           isMicrophoneActive = true;
         });
@@ -555,25 +536,74 @@
           .getElementById("oscilloscope")
           .getContext("2d");
         canvasCtx.clearRect(0, 0, oscilloscope.width, oscilloscope.height);
+
         canvasCtx.beginPath();
-        const sliceWidth = oscilloscope.width / bufferLength;
+        const sliceWidth = (oscilloscope.width * 1.0) / bufferLength;
         let x = 0;
+
         for (let i = 0; i < bufferLength; i++) {
           const v = dataArray[i] * 200.0;
           const y = oscilloscope.height / 2 + v;
+
           if (i === 0) {
             canvasCtx.moveTo(x, y);
           } else {
             canvasCtx.lineTo(x, y);
           }
+
           x += sliceWidth;
         }
+
         canvasCtx.lineTo(oscilloscope.width, oscilloscope.height / 2);
         canvasCtx.stroke();
       }
 
-      // --- Spectrum and Waveform Visualization ---
-      //const fileInput = document.getElementById("audioFile");
+      /*function drawMagnitudeSpectrum() {
+      const canvasCtx = document.getElementById('magnitude-spectrum').getContext('2d');
+      canvasCtx.clearRect(0, 0, magnitudeSpectrum.width, magnitudeSpectrum.height);
+
+      const barWidth = (magnitudeSpectrum.width / (bufferLength / 2)) * 2.5;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength / 2; i++) {
+        const barHeight = (magnitudeArray[i] + 140) * 2;
+        canvasCtx.fillStyle = 'rgb(' + Math.floor(barHeight + 100) + ',50,50)';
+        canvasCtx.fillRect(x, magnitudeSpectrum.height - barHeight / 2, barWidth, barHeight / 2);
+        x += barWidth + 1;
+      }
+    }*/
+
+      function updateSpectrogram() {
+        spectrogramData.push([...magnitudeArray]);
+        if (spectrogramData.length > spectrogram.height) {
+          spectrogramData.shift();
+        }
+      }
+
+      /*function drawSpectrogram() {
+      const canvasCtx = document.getElementById('spectrogram').getContext('2d');
+      const imageData = canvasCtx.createImageData(spectrogram.width, spectrogram.height);
+
+      for (let y = 0; y < spectrogramData.length; y++) {
+        for (let x = 0; x < bufferLength / 2; x++) {
+          const value = (spectrogramData[y][x] + 140) * 2;
+          const index = (x + y * spectrogram.width) * 4;
+          imageData.data[index] = value; // Red
+          imageData.data[index + 1] = 50; // Green
+          imageData.data[index + 2] = 50; // Blue
+          imageData.data[index + 3] = 255; // Alpha
+        }
+      }
+
+      canvasCtx.putImageData(imageData, 0, 0);
+    }*/
+
+      /*
+    spectrum
+    */
+
+      //const audio = document.getElementById("audio");
+      const fileInput = document.getElementById("audioFile");
       const spectrumContainer = document.getElementById("spectrum-container");
       const waveformCanvas = document.getElementById("waveform");
       const realTimeSpectrum = document.getElementById("realTimeSpectrum");
@@ -586,31 +616,67 @@
         bufferLengthSpectrum,
         dataArraySpectrum,
         waveformArray;
+      //let audioCtx, waveformAnalyser, source, waveformArray;
       let segmentInterval = sd; // 5-second segments
       let segments = [];
       let timeoutId;
 
+      //load audio
+      /*
+        function loadAllAudioSegments() {
+            // Combine all audio chunks from segmentEmotion into one single Blob
+            const allChunks = segmentEmotion.map(segment => segment[0]); // Extract all chunks (audio data)
+            const combinedAudio = new Blob(allChunks, { type: "audio/wav" }); // Assuming WAV format
+        
+            // Create a URL for the combined audio
+            const url = URL.createObjectURL(combinedAudio);
+        
+            // Find the audio element to play the combined audio
+            const audio = document.getElementById("audio"); // Ensure you have an <audio> element with id="audio"
+            audio.src = url; // Set the audio source to the created URL
+            //audio.play(); // Play the combined audio
+            setupAudioContext();
+        }
+
+        loadAllAudioSegments();
+        */
+      ///end load audio
+
+      /*fileInput.addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                audio.src = url;
+                setupAudioContext();
+            }
+        });*/
+
       function setupAudioContext() {
         if (audioCtx) audioCtx.close();
-        segmentInterval = sd;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
         analyserSpectrum = audioCtx.createAnalyser();
         analyserSpectrum.fftSize = 512;
         bufferLengthSpectrum = analyserSpectrum.frequencyBinCount;
         dataArraySpectrum = new Uint8Array(bufferLengthSpectrum);
+
         waveformAnalyser = audioCtx.createAnalyser();
         waveformAnalyser.fftSize = 2048;
         waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+
         source = audioCtx.createMediaElementSource(audio);
         source.connect(analyserSpectrum);
         source.connect(waveformAnalyser);
         analyserSpectrum.connect(audioCtx.destination);
+
         spectrumContainer.innerHTML = "";
         segments = [];
+
         audio.addEventListener("play", scheduleNextSegment);
         audio.addEventListener("seeked", () => {
           if (!audio.paused) scheduleNextSegment();
         });
+
         requestAnimationFrame(drawWaveform);
         requestAnimationFrame(drawRealTimeSpectrum);
         requestAnimationFrame(updateActiveSegment);
@@ -618,10 +684,12 @@
 
       function scheduleNextSegment() {
         if (timeoutId) clearTimeout(timeoutId);
+
         const currentTime = audio.currentTime;
         const nextSegmentEnd =
           Math.floor(currentTime / segmentInterval + 1) * segmentInterval;
         const timeUntilNext = (nextSegmentEnd - currentTime) * 1000;
+
         timeoutId = setTimeout(() => {
           if (!audio.paused && !audio.ended) {
             const segmentStart = nextSegmentEnd - segmentInterval;
@@ -639,6 +707,7 @@
           !segments.some((s) => s.dataset.start === segmentStart.toString())
         ) {
           renderSegment(new Uint8Array(dataArraySpectrum), segmentStart);
+          // Auto-scroll to new segment
           spectrumContainer.scrollLeft = spectrumContainer.scrollWidth;
         }
       }
@@ -646,22 +715,24 @@
       function renderSegment(segmentData, segmentStart) {
         const segmentDiv = document.createElement("div");
         segmentDiv.className = "segment";
+
         const canvas = document.createElement("canvas");
         canvas.width = 120;
         canvas.height = 120;
+
         const timestampLabel = document.createElement("div");
         timestampLabel.className = "timestamp";
         timestampLabel.textContent = `${formatTime(
           segmentStart
-        )} - ${formatTime(segmentStart + segmentInterval)} ${
-          segmentEmotion[segmentStart]
-        }`;
+        )} - ${formatTime(segmentStart + segmentInterval)}neutral`;
+
         segmentDiv.appendChild(canvas);
         segmentDiv.appendChild(timestampLabel);
         segmentDiv.dataset.start = segmentStart;
         segmentDiv.addEventListener("click", () => {
           audio.currentTime = segmentStart;
         });
+
         spectrumContainer.appendChild(segmentDiv);
         segments.push(segmentDiv);
         drawSpectrum(canvas, segmentData);
@@ -670,8 +741,10 @@
       function drawSpectrum(canvas, segmentData) {
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         const barWidth = (canvas.width / bufferLengthSpectrum) * 2.5;
         let x = 0;
+
         for (let i = 0; i < bufferLengthSpectrum; i++) {
           const barHeight = segmentData[i] / 2;
           ctx.fillStyle = `hsl(${(i * 360) / bufferLengthSpectrum}, 70%, 60%)`;
@@ -682,7 +755,9 @@
 
       function drawRealTimeSpectrum() {
         requestAnimationFrame(drawRealTimeSpectrum);
+
         analyserSpectrum.getByteFrequencyData(dataArraySpectrum);
+
         spectrumCtx.clearRect(
           0,
           0,
@@ -690,8 +765,10 @@
           realTimeSpectrum.height
         );
         realTimeSpectrum.width = window.innerWidth * 0.8;
+
         const barWidth = (realTimeSpectrum.width / bufferLengthSpectrum) * 2.5;
         let x = 0;
+
         for (let i = 0; i < bufferLengthSpectrum; i++) {
           const barHeight =
             (dataArraySpectrum[i] / 255) * realTimeSpectrum.height;
@@ -710,21 +787,26 @@
 
       function drawWaveform() {
         requestAnimationFrame(drawWaveform);
+
         waveformAnalyser.getByteTimeDomainData(waveformArray);
         const ctx = waveformCanvas.getContext("2d");
         waveformCanvas.width = window.innerWidth * 0.8;
         ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+
         ctx.lineWidth = 2;
         ctx.strokeStyle = "#0ff";
         ctx.beginPath();
+
         let sliceWidth = waveformCanvas.width / waveformArray.length;
         let x = 0;
+
         for (let i = 0; i < waveformArray.length; i++) {
           const v = waveformArray[i] / 128.0;
           const y = (v * waveformCanvas.height) / 2;
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
           x += sliceWidth;
         }
+
         ctx.stroke();
       }
 

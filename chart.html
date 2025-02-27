@@ -186,7 +186,7 @@
 
 
 
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -299,5 +299,190 @@
   </script>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/wavefile/1.2.7/wavefile.min.js"></script>
+</body>
+</html> -->
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Visualizer with Auto-Scroll</title>
+    <style>
+        body { text-align: center; background: #000; color: #fff; font-family: Arial, sans-serif; }
+        #visualization-container {
+            width: 80%;
+            margin: 20px auto;
+        }
+        canvas { 
+            background: #000; 
+            display: block; 
+            margin: 10px auto;
+        }
+        #realTimeSpectrum { height: 150px; }
+        #waveform { height: 100px; }
+        #spectrum-container {
+            display: flex;
+            overflow-x: auto;
+            padding: 10px;
+            background: #111;
+            scroll-behavior: smooth;
+        }
+        .segment {
+            text-align: center;
+            margin-right: 15px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .segment:hover { transform: scale(1.05); }
+        .active { box-shadow: 0 0 10px yellow; }
+        .timestamp {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        audio { width: 40%; margin: 10px auto; }
+    </style>
+</head>
+<body>
+    <audio id="audio" controls>
+        <source src="your-audio-file.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <div id="visualization-container">
+        <canvas id="realTimeSpectrum"></canvas>
+        <canvas id="waveform"></canvas>
+    </div>
+
+    <div id="spectrum-container"></div>
+
+    <script>
+        const audio = document.getElementById("audio");
+        const spectrumContainer = document.getElementById("spectrum-container");
+        const waveformCanvas = document.getElementById("waveform");
+        const realTimeSpectrum = document.getElementById("realTimeSpectrum");
+        const spectrumCtx = realTimeSpectrum.getContext("2d");
+
+        let audioCtx, analyser, waveformAnalyser, source, bufferLength, dataArray, waveformArray;
+        const segmentInterval = 4; // 4-second segments
+        let segments = [];
+        let timeoutId;
+
+        audio.addEventListener('play', () => {
+            if (!audioCtx) {
+                setupAudioContext();
+            }
+            scheduleNextSegment();
+        });
+
+        audio.addEventListener('pause', () => {
+            if (timeoutId) clearTimeout(timeoutId);
+        });
+
+        audio.addEventListener('seeked', () => {
+            if (!audio.paused) scheduleNextSegment();
+        });
+
+        function setupAudioContext() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512;
+            bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+
+            waveformAnalyser = audioCtx.createAnalyser();
+            waveformAnalyser.fftSize = 2048;
+            waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+
+            source = audioCtx.createMediaElementSource(audio);
+            source.connect(analyser);
+            source.connect(waveformAnalyser);
+            analyser.connect(audioCtx.destination);
+
+            spectrumContainer.innerHTML = '';
+            segments = [];
+
+            requestAnimationFrame(drawWaveform);
+            requestAnimationFrame(drawRealTimeSpectrum);
+            requestAnimationFrame(updateActiveSegment);
+        }
+
+        function scheduleNextSegment() {
+            if (timeoutId) clearTimeout(timeoutId);
+            
+            const currentTime = audio.currentTime;
+            const nextSegmentEnd = Math.floor(currentTime / segmentInterval + 1) * segmentInterval;
+            const timeUntilNext = (nextSegmentEnd - currentTime) * 1000;
+
+            timeoutId = setTimeout(() => {
+                if (!audio.paused && !audio.ended) {
+                    const segmentStart = nextSegmentEnd - segmentInterval;
+                    if (segmentStart >= 0) {
+                        captureSegment(segmentStart);
+                    }
+                    scheduleNextSegment();
+                }
+            }, Math.max(0, timeUntilNext));
+        }
+
+        function captureSegment(segmentStart) {
+            analyser.getByteFrequencyData(dataArray);
+            if (!segments.some(s => s.dataset.start === segmentStart.toString())) {
+                renderSegment(new Uint8Array(dataArray), segmentStart);
+                spectrumContainer.scrollLeft = spectrumContainer.scrollWidth;
+            }
+        }
+
+        function renderSegment(segmentData, segmentStart) {
+            const segmentDiv = document.createElement("div");
+            segmentDiv.className = "segment";
+            
+            const canvas = document.createElement("canvas");
+            canvas.width = 120;
+            canvas.height = 120;
+            
+            const timestampLabel = document.createElement("div");
+            timestampLabel.className = "timestamp";
+            timestampLabel.textContent = `${formatTime(segmentStart)} - ${formatTime(segmentStart + segmentInterval)}`;
+            
+            segmentDiv.appendChild(canvas);
+            segmentDiv.appendChild(timestampLabel);
+            segmentDiv.dataset.start = segmentStart;
+            segmentDiv.addEventListener("click", () => {
+                audio.currentTime = segmentStart;
+            });
+
+            spectrumContainer.appendChild(segmentDiv);
+            segments.push(segmentDiv);
+            drawSpectrum(canvas, segmentData);
+        }
+
+        function updateActiveSegment() {
+            requestAnimationFrame(updateActiveSegment);
+            const currentTime = audio.currentTime;
+
+            segments.forEach(segment => {
+                const segmentStart = parseFloat(segment.dataset.start);
+                segment.classList.toggle("active", currentTime >= segmentStart && currentTime < segmentStart + segmentInterval);
+            });
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${minutes}:${secs < 10 ? "0" : ""}${secs}`;
+        }
+    </script>
 </body>
 </html>
