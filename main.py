@@ -13,6 +13,7 @@ app = FastAPI()
 
 # Serve static files (Ensure you have a 'static' folder)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/frontend", StaticFiles(directory="static"), name="frontend")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)  # Ensure the upload directory exists

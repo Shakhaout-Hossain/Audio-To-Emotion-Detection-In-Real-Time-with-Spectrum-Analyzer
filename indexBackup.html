@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Audio To Emotion Detection In Real Time with Spectrum Analyzer
+    </title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- <script src="static/audio.js" defer></script> -->
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+    />
+    <link rel="icon" type="image/x-icon" href="static/favicon.ico" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+        text-align: center;
+      }
+      #status {
+        margin-bottom: 1rem;
+        font-weight: bold;
+      }
+      .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .left-panel {
+        width: 48%;
+        text-align: left;
+      }
+      .right-panel {
+        width: 48%;
+      }
+      #results {
+        width: 100%;
+        max-height: 600px; /* Adjust the height as needed */
+        border: 1px solid #ccc;
+        padding: 1rem;
+        background: #f9f9f9;
+        overflow-y: auto; /* Enables vertical scrolling */
+        overflow-x: hidden; /* Disables horizontal scrolling */
+      }
+      #chartContainer {
+        width: 100%;
+        margin-top: 2rem;
+      }
+      button,
+      input {
+        margin: 0.5rem;
+        padding: 10px 20px;
+        font-size: 16px;
+        border: none;
+        cursor: pointer;
+        border-radius: 5px;
+      }
+      #startBtn {
+        background-color: #28a745;
+        color: white;
+      }
+      #stopBtn {
+        background-color: #dc3545;
+        color: white;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      canvas {
+        width: 100%;
+        height: 200px;
+        margin-top: 1rem;
+      }
+      #audio-spectrum-label {
+        font-size: 18px;
+        margin-top: 15px;
+        font-weight: bold;
+      }
+      /* spectrum */
+      #visualization-container {
+        width: 80%;
+        margin: 20px auto;
+      }
+      #realTimeSpectrum {
+        height: 150px;
+        background: #111;
+      }
+      #waveform {
+        height: 100px;
+        background: #111;
+      }
+      #spectrum-container {
+        display: flex;
+        overflow-x: auto;
+        padding: 10px;
+        background: #111;
+        scroll-behavior: smooth;
+      }
+      .segment {
+        text-align: center;
+        margin-right: 15px;
+        cursor: pointer;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }
+      .segment:hover {
+        transform: scale(1.05);
+      }
+      .active {
+        box-shadow: 0 0 10px yellow;
+      }
+      .timestamp {
+        font-size: 12px;
+        color: #aaa;
+        margin-top: 5px;
+      }
+      input[type="file"] {
+        margin: 20px;
+        color: white;
+      }
+      audio {
+        width: 40%;
+        margin: 10px auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Audio To Emotion Detection In Real Time with Spectrum Analyzer</h1>
+    <label for="chunkTime">Chunk Time (ms):</label>
+    <input type="number" id="chunkTime" value="5000" min="1000" step="1000" />
+    <button id="startBtn">Start Recording</button>
+    <button id="stopBtn" disabled>Stop Recording</button>
+    <p id="status">Set chunk time and click "Start Recording".</p>
+    <!-- <audio
+      id="playback"
+      controls
+      style="display: none; margin-top: 1rem; margin: auto; text-align: center"
+    ></audio> -->
+
+    <div class="container">
+      <div class="left-panel">
+        <div id="results">No results yet. Please start recording.</div>
+      </div>
+      <div class="right-panel">
+        <div id="chartContainer">
+          <canvas id="emotionChartLoad"></canvas>
+        </div>
+        <div id="audio-spectrum-label">Audio Spectrum Analyzer</div>
+        <canvas id="oscilloscope" class="my-3"></canvas>
+      </div>
+    </div>
+
+    <!-- <input type="file" id="audioFile" accept="audio/*" /> -->
+    <h1>Full Audio Analysis</h1>
+    <audio id="audio" controls></audio>
+
+    <div id="visualization-container">
+      <canvas id="realTimeSpectrum"></canvas>
+      <canvas id="waveform"></canvas>
+    </div>
+
+    <div id="spectrum-container"></div>
+
+    <script>
+      // --- Helper functions for merging and exporting audio ---
+      async function mergeAndExportAudio(chunks) {
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const decodedBuffers = [];
+        for (const chunk of chunks) {
+          const arrayBuffer = await chunk.arrayBuffer();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          decodedBuffers.push(audioBuffer);
+        }
+        if (decodedBuffers.length === 0) {
+          return null;
+        }
+        const sampleRate = decodedBuffers[0].sampleRate;
+        const numberOfChannels = decodedBuffers[0].numberOfChannels;
+        const totalLength = decodedBuffers.reduce(
+          (sum, buffer) => sum + buffer.length,
+          0
+        );
+        const mergedBuffer = audioContext.createBuffer(
+          numberOfChannels,
+          totalLength,
+          sampleRate
+        );
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+          let offset = 0;
+          for (const buffer of decodedBuffers) {
+            mergedBuffer
+              .getChannelData(channel)
+              .set(buffer.getChannelData(channel), offset);
+            offset += buffer.length;
+          }
+        }
+        const wavBlob = bufferToWav(mergedBuffer);
+        return wavBlob;
+      }
+
+      function bufferToWav(buffer) {
+        const numOfChan = buffer.numberOfChannels;
+        const sampleRate = buffer.sampleRate;
+        const format = 1; // PCM
+        const bitDepth = 16;
+        const numSamples = buffer.length;
+        const blockAlign = (numOfChan * bitDepth) / 8;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = numSamples * blockAlign;
+        const bufferLength = 44 + dataSize;
+        const arrayBuffer = new ArrayBuffer(bufferLength);
+        const view = new DataView(arrayBuffer);
+
+        writeString(view, 0, "RIFF");
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(view, 8, "WAVE");
+        writeString(view, 12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, format, true);
+        view.setUint16(22, numOfChan, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitDepth, true);
+        writeString(view, 36, "data");
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+        if (numOfChan === 2) {
+          const channel0 = buffer.getChannelData(0);
+          const channel1 = buffer.getChannelData(1);
+          for (let i = 0; i < numSamples; i++) {
+            let sample = Math.max(-1, Math.min(1, channel0[i]));
+            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(offset, sample, true);
+            offset += 2;
+            sample = Math.max(-1, Math.min(1, channel1[i]));
+            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(offset, sample, true);
+            offset += 2;
+          }
+        } else {
+          const channelData = buffer.getChannelData(0);
+          for (let i = 0; i < numSamples; i++) {
+            let sample = Math.max(-1, Math.min(1, channelData[i]));
+            sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(offset, sample, true);
+            offset += 2;
+          }
+        }
+        return new Blob([arrayBuffer], { type: "audio/wav" });
+      }
+
+      function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      // --- Main variables and configuration ---
+      const audio = document.getElementById("audio");
+      let wsAudio;
+      let mediaRecorder;
+      let audioStream;
+      let isRecording = false;
+      let segmentDuration;
+      let emotions = [];
+      let chunkIds = [];
+      let td = 0;
+      let sd = 5;
+      let audioChunks = [];
+      let segmentEmotion = {};
+      //const segmentEmotion = new Map();
+      let chunk;
+
+      // Emotion configuration
+      const emotionsChart = {
+        labels: [
+          "Neutral",
+          "Calm",
+          "Happy",
+          "Sad",
+          "Angry",
+          "Fear",
+          "Disgust",
+          "Surprise",
+        ],
+        labelToIndex: {
+          Neutral: 0,
+          Calm: 1,
+          Happy: 2,
+          Sad: 3,
+          Angry: 4,
+          Fear: 5,
+          Disgust: 6,
+          Surprise: 7,
+        },
+        data: [0, 0, 0, 0, 0, 0, 0, 0],
+        colors: [
+          "#9CA3AF",
+          "#3B82F6",
+          "#FCD34D",
+          "#6B7280",
+          "#EF4444",
+          "#7C3AED",
+          "#10B981",
+          "#F59E0B",
+        ],
+      };
+
+      // Function to increase data by label
+      function increaseData(label, amount = 1) {
+        const index = emotionsChart.labelToIndex[label];
+        if (index !== undefined) {
+          emotionsChart.data[index] += amount;
+          emotionChart.update();
+        }
+      }
+
+      // Chart configuration
+      const config = {
+        type: "bar",
+        data: {
+          labels: emotionsChart.labels,
+          datasets: [
+            {
+              label: "Emotion Intensity",
+              data: emotionsChart.data,
+              backgroundColor: emotionsChart.colors,
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true },
+          },
+        },
+      };
+
+      // Render the emotion chart
+      const emotionChart = new Chart(
+        document.getElementById("emotionChartLoad"),
+        config
+      );
+
+      function connectWebSocket() {
+        //wsAudio = new WebSocket("ws://0.0.0.0:8000/ws/audio");
+        wsAudio = new WebSocket("ws://localhost:8000/ws/audio");
+        wsAudio.onmessage = (event) => {
+          let data = JSON.parse(event.data);
+          let resultsContainer = document.getElementById("results");
+          if (resultsContainer.textContent.includes("No results yet")) {
+            resultsContainer.textContent = "";
+          }
+
+          const para = document.createElement("p");
+          para.textContent = `Chunk: ${td}sec to ${td + sd}sec - Result: ${
+            data.result
+          }`;
+          //segmentEmotion.set(td, data.result);
+          segmentEmotion[td] = data.result;
+          //console.log(td + " " + segmentEmotion[td]);
+          td += sd;
+          switch (data.result.toLowerCase()) {
+            case "neutral":
+              para.style.color = "#9CA3AF";
+              break;
+            case "calm":
+              para.style.color = "#3B82F6";
+              break;
+            case "happy":
+              para.style.color = "#FCD34D";
+              break;
+            case "sad":
+              para.style.color = "#6B7280";
+              break;
+            case "angry":
+              para.style.color = "#EF4444";
+              break;
+            case "fear":
+              para.style.color = "#7C3AED";
+              break;
+            case "disgust":
+              para.style.color = "#10B981";
+              break;
+            case "surprise":
+              para.style.color = "#F59E0B";
+              break;
+            default:
+              para.style.color = "red";
+          }
+
+          resultsContainer.appendChild(para);
+          resultsContainer.scrollTop = resultsContainer.scrollHeight;
+          increaseData(data.result, 1); // Adds 1 to corresponding emotion's value
+        };
+      }
+
+      async function startRecording() {
+        if (isRecording) return;
+        isRecording = true;
+        audioChunks = []; // Reset audio chunks array
+        segmentDuration =
+          parseInt(document.getElementById("chunkTime").value) || 5000;
+        sd = segmentDuration / 1000;
+        try {
+          audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+        } catch (error) {
+          console.error("Microphone access denied:", error);
+          return;
+        }
+        mediaRecorder = new MediaRecorder(audioStream, {
+          mimeType: "audio/webm; codecs=opus",
+        });
+        mediaRecorder.ondataavailable = async (event) => {
+          if (event.data.size > 0 && wsAudio.readyState === WebSocket.OPEN) {
+            wsAudio.send(await event.data.arrayBuffer());
+          }
+          audioChunks.push(event.data); // Store the audio chunk
+          chunk = event.data;
+        };
+
+        function recordSegment() {
+          if (!isRecording) return;
+          mediaRecorder.start();
+          setTimeout(() => {
+            mediaRecorder.stop();
+            setTimeout(recordSegment, 200);
+          }, segmentDuration);
+        }
+        connectWebSocket();
+        recordSegment();
+        document.getElementById(
+          "status"
+        ).textContent = `Recording with chunk time: ${segmentDuration}ms`;
+        document.getElementById("startBtn").disabled = true;
+        document.getElementById("stopBtn").disabled = false;
+        startSpectrumAnalyzer(); // Start the spectrum analyzer as well
+      }
+
+      document
+        .getElementById("startBtn")
+        .addEventListener("click", startRecording);
+
+      // Updated stop handler that merges audio chunks into a proper WAV file
+      document.getElementById("stopBtn").addEventListener("click", async () => {
+        isRecording = false;
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+        if (audioStream) {
+          audioStream.getTracks().forEach((track) => track.stop());
+        }
+        document.getElementById("status").textContent = "Recording stopped.";
+        document.getElementById("startBtn").disabled = false;
+        document.getElementById("stopBtn").disabled = true;
+        stopSpectrumAnalyzer(); // Stop the spectrum analyzer
+
+        if (audioChunks.length > 0) {
+          const wavBlob = await mergeAndExportAudio(audioChunks);
+          if (wavBlob) {
+            const audioUrl = URL.createObjectURL(wavBlob);
+            //const audioPlayer = document.getElementById("playback");
+            //audioPlayer.src = audioUrl;
+            //audioPlayer.style.display = "block";
+
+            //audioPlayer.onloadedmetadata = () => {
+            // console.log("Actual duration:", audioPlayer.duration);
+            //};
+            // For spectrum analyzer purposes
+            audio.src = audioUrl;
+            setupAudioContext();
+          }
+          audioChunks = [];
+        }
+      });
+
+      // --- Spectrum Analyzer Code ---
+      let audioContext, analyser, microphone, audioProcessorNode;
+      let isMicrophoneActive = false;
+      const fftSize = 2048;
+      const bufferLength = fftSize;
+      const dataArray = new Float32Array(bufferLength);
+      const magnitudeArray = new Float32Array(bufferLength / 2);
+      const spectrogramData = [];
+
+      function startSpectrumAnalyzer() {
+        if (isMicrophoneActive) return;
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const processorCode = `
+        class AudioProcessor extends AudioWorkletProcessor {
+          static get parameterDescriptors() {
+            return [];
+          }
+          process(inputs, outputs, parameters) {
+            const input = inputs[0];
+            if (input.length > 0) {
+              this.port.postMessage(input[0][0]);
+            }
+            return true;
+          }
+        }
+        registerProcessor('audio-processor', AudioProcessor);
+      `;
+        const blob = new Blob([processorCode], {
+          type: "application/javascript",
+        });
+        const url = URL.createObjectURL(blob);
+        audioContext.audioWorklet.addModule(url).then(() => {
+          navigator.mediaDevices
+            .getUserMedia({ audio: true })
+            .then((stream) => {
+              analyser = audioContext.createAnalyser();
+              analyser.fftSize = fftSize;
+              microphone = audioContext.createMediaStreamSource(stream);
+              audioProcessorNode = new AudioWorkletNode(
+                audioContext,
+                "audio-processor"
+              );
+              microphone.connect(analyser);
+              analyser
+                .connect(audioProcessorNode)
+                .connect(audioContext.destination);
+              audioProcessorNode.port.onmessage = () => {
+                analyser.getFloatTimeDomainData(dataArray);
+                analyser.getFloatFrequencyData(magnitudeArray);
+                drawOscilloscope();
+              };
+            })
+            .catch((err) => {
+              console.error("Error accessing the microphone", err);
+            });
+          audioContext.resume();
+          isMicrophoneActive = true;
+        });
+      }
+
+      function stopSpectrumAnalyzer() {
+        if (audioContext) {
+          audioContext.close();
+          isMicrophoneActive = false;
+        }
+      }
+
+      function drawOscilloscope() {
+        const canvasCtx = document
+          .getElementById("oscilloscope")
+          .getContext("2d");
+        canvasCtx.clearRect(0, 0, oscilloscope.width, oscilloscope.height);
+        canvasCtx.beginPath();
+        const sliceWidth = oscilloscope.width / bufferLength;
+        let x = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const v = dataArray[i] * 200.0;
+          const y = oscilloscope.height / 2 + v;
+          if (i === 0) {
+            canvasCtx.moveTo(x, y);
+          } else {
+            canvasCtx.lineTo(x, y);
+          }
+          x += sliceWidth;
+        }
+        canvasCtx.lineTo(oscilloscope.width, oscilloscope.height / 2);
+        canvasCtx.stroke();
+      }
+
+      // --- Spectrum and Waveform Visualization ---
+      //const fileInput = document.getElementById("audioFile");
+      const spectrumContainer = document.getElementById("spectrum-container");
+      const waveformCanvas = document.getElementById("waveform");
+      const realTimeSpectrum = document.getElementById("realTimeSpectrum");
+      const spectrumCtx = realTimeSpectrum.getContext("2d");
+
+      let audioCtx,
+        analyserSpectrum,
+        waveformAnalyser,
+        source,
+        bufferLengthSpectrum,
+        dataArraySpectrum,
+        waveformArray;
+      let segmentInterval = sd; // 5-second segments
+      let segments = [];
+      let timeoutId;
+
+      function setupAudioContext() {
+        if (audioCtx) audioCtx.close();
+        segmentInterval = sd;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyserSpectrum = audioCtx.createAnalyser();
+        analyserSpectrum.fftSize = 512;
+        bufferLengthSpectrum = analyserSpectrum.frequencyBinCount;
+        dataArraySpectrum = new Uint8Array(bufferLengthSpectrum);
+        waveformAnalyser = audioCtx.createAnalyser();
+        waveformAnalyser.fftSize = 2048;
+        waveformArray = new Uint8Array(waveformAnalyser.frequencyBinCount);
+        source = audioCtx.createMediaElementSource(audio);
+        source.connect(analyserSpectrum);
+        source.connect(waveformAnalyser);
+        analyserSpectrum.connect(audioCtx.destination);
+        spectrumContainer.innerHTML = "";
+        segments = [];
+        audio.addEventListener("play", scheduleNextSegment);
+        audio.addEventListener("seeked", () => {
+          if (!audio.paused) scheduleNextSegment();
+        });
+        requestAnimationFrame(drawWaveform);
+        requestAnimationFrame(drawRealTimeSpectrum);
+        requestAnimationFrame(updateActiveSegment);
+      }
+
+      function scheduleNextSegment() {
+        if (timeoutId) clearTimeout(timeoutId);
+        const currentTime = audio.currentTime;
+        const nextSegmentEnd =
+          Math.floor(currentTime / segmentInterval + 1) * segmentInterval;
+        const timeUntilNext = (nextSegmentEnd - currentTime) * 1000;
+        timeoutId = setTimeout(() => {
+          if (!audio.paused && !audio.ended) {
+            const segmentStart = nextSegmentEnd - segmentInterval;
+            if (segmentStart >= 0) {
+              captureSegment(segmentStart);
+            }
+            scheduleNextSegment();
+          }
+        }, Math.max(0, timeUntilNext));
+      }
+
+      function captureSegment(segmentStart) {
+        analyserSpectrum.getByteFrequencyData(dataArraySpectrum);
+        if (
+          !segments.some((s) => s.dataset.start === segmentStart.toString())
+        ) {
+          renderSegment(new Uint8Array(dataArraySpectrum), segmentStart);
+          spectrumContainer.scrollLeft = spectrumContainer.scrollWidth;
+        }
+      }
+
+      function renderSegment(segmentData, segmentStart) {
+        const segmentDiv = document.createElement("div");
+        segmentDiv.className = "segment";
+        const canvas = document.createElement("canvas");
+        canvas.width = 120;
+        canvas.height = 120;
+        const timestampLabel = document.createElement("div");
+        timestampLabel.className = "timestamp";
+        timestampLabel.textContent = `${formatTime(
+          segmentStart
+        )} - ${formatTime(segmentStart + segmentInterval)} ${
+          segmentEmotion[segmentStart]
+        }`;
+        segmentDiv.appendChild(canvas);
+        segmentDiv.appendChild(timestampLabel);
+        segmentDiv.dataset.start = segmentStart;
+        segmentDiv.addEventListener("click", () => {
+          audio.currentTime = segmentStart;
+        });
+        spectrumContainer.appendChild(segmentDiv);
+        segments.push(segmentDiv);
+        drawSpectrum(canvas, segmentData);
+      }
+
+      function drawSpectrum(canvas, segmentData) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const barWidth = (canvas.width / bufferLengthSpectrum) * 2.5;
+        let x = 0;
+        for (let i = 0; i < bufferLengthSpectrum; i++) {
+          const barHeight = segmentData[i] / 2;
+          ctx.fillStyle = `hsl(${(i * 360) / bufferLengthSpectrum}, 70%, 60%)`;
+          ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+          x += barWidth + 1;
+        }
+      }
+
+      function drawRealTimeSpectrum() {
+        requestAnimationFrame(drawRealTimeSpectrum);
+        analyserSpectrum.getByteFrequencyData(dataArraySpectrum);
+        spectrumCtx.clearRect(
+          0,
+          0,
+          realTimeSpectrum.width,
+          realTimeSpectrum.height
+        );
+        realTimeSpectrum.width = window.innerWidth * 0.8;
+        const barWidth = (realTimeSpectrum.width / bufferLengthSpectrum) * 2.5;
+        let x = 0;
+        for (let i = 0; i < bufferLengthSpectrum; i++) {
+          const barHeight =
+            (dataArraySpectrum[i] / 255) * realTimeSpectrum.height;
+          spectrumCtx.fillStyle = `hsl(${
+            (i * 360) / bufferLengthSpectrum
+          }, 100%, 60%)`;
+          spectrumCtx.fillRect(
+            x,
+            realTimeSpectrum.height - barHeight,
+            barWidth,
+            barHeight
+          );
+          x += barWidth + 1;
+        }
+      }
+
+      function drawWaveform() {
+        requestAnimationFrame(drawWaveform);
+        waveformAnalyser.getByteTimeDomainData(waveformArray);
+        const ctx = waveformCanvas.getContext("2d");
+        waveformCanvas.width = window.innerWidth * 0.8;
+        ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#0ff";
+        ctx.beginPath();
+        let sliceWidth = waveformCanvas.width / waveformArray.length;
+        let x = 0;
+        for (let i = 0; i < waveformArray.length; i++) {
+          const v = waveformArray[i] / 128.0;
+          const y = (v * waveformCanvas.height) / 2;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          x += sliceWidth;
+        }
+        ctx.stroke();
+      }
+
+      function updateActiveSegment() {
+        requestAnimationFrame(updateActiveSegment);
+        const currentTime = audio.currentTime;
+        segments.forEach((segment) => {
+          const start = parseFloat(segment.dataset.start);
+          segment.classList.toggle(
+            "active",
+            currentTime >= start && currentTime < start + segmentInterval
+          );
+        });
+      }
+
+      function formatTime(seconds) {
+        const min = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${min}:${sec.toString().padStart(2, "0")}`;
+      }
+    </script>
+  </body>
+</html>

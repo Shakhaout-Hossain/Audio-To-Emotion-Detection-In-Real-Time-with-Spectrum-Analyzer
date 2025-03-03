@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,13 +7,13 @@
     <title>
       Audio To Emotion Detection In Real Time with Spectrum Analyzer
     </title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link
       rel="stylesheet"
       href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
     />
+    <link rel="stylesheet" href="styles.css" />
     <link rel="icon" type="image/x-icon" href="static/favicon.ico" />
-    <link rel="stylesheet" href="static/css/styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
     <h1>Audio To Emotion Detection In Real Time with Spectrum Analyzer</h1>
@@ -35,22 +36,13 @@
       </div>
     </div>
 
-    <h1>Full Audio Analysis</h1>
     <audio id="audio" controls></audio>
-
     <div id="visualization-container">
       <canvas id="realTimeSpectrum"></canvas>
       <canvas id="waveform"></canvas>
     </div>
-
     <div id="spectrum-container"></div>
 
-    <!-- JavaScript files -->
-    <script src="static/js/helpers.js"></script>
-    <script src="static/js/WebSocketClient.js"></script>
-    <script src="static/js/EmotionChart.js"></script>
-    <script src="static/js/AudioRecorder.js"></script>
-    <script src="static/js/AudioVisualizer.js"></script>
-    <script src="static/js/main.js"></script>
+    <script type="module" src="main.js"></script>
   </body>
 </html>
