@@ -16,7 +16,7 @@ venv/
 *.sqlite  # If using SQLite DB file (but ignore if using a proper database)
 
 uploads/
-
+frontend/
 # Test File
 
 spectrum.html
